@@ -11,6 +11,13 @@ export const config = {
 
 const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+  compatibility: "strict",
+  fetch: (url, init) => {
+    return fetch(url, {
+      ...init,
+      signal: AbortSignal.timeout(120000),
+    });
+  },
 });
 
 export default async function handler(req, res) {
@@ -166,15 +173,23 @@ ${trimmed}
     console.log("Contract type:", contractType);
     console.log("Country:", country);
 
-    const { text } = await generateText({
-      model: openai("gpt-4o-mini", {
-        structuredOutputs: true,
-      }),
-      temperature: 0.2,
-      system: systemPrompt,
-      prompt: userPrompt,
-    });
-    console.log("Step 4: OpenAI API call completed ✓");
+    let text;
+    try {
+      const result = await generateText({
+        model: openai("gpt-4o-mini"),
+        temperature: 0.2,
+        maxTokens: 4000,
+        system: systemPrompt,
+        prompt: userPrompt,
+        maxRetries: 2,
+      });
+      text = result.text;
+      console.log("Step 4: OpenAI API call completed ✓");
+    } catch (apiError) {
+      console.log("OpenAI API Error:", apiError.message);
+      console.log("Full error:", JSON.stringify(apiError, null, 2));
+      throw new Error(`OpenAI API failed: ${apiError.message}`);
+    }
 
     console.log("Step 5: Processing OpenAI response...");
     console.log("Response text (first 300 chars):", text.slice(0, 300));
