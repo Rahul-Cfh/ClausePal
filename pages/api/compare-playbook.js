@@ -1,9 +1,20 @@
 import { createClient } from '@supabase/supabase-js';
-import { openai } from '@ai-sdk/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 import { generateText } from 'ai';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const openai = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  compatibility: "strict",
+  fetch: (url, init) => {
+    return fetch(url, {
+      ...init,
+      signal: AbortSignal.timeout(120000),
+    });
+  },
+});
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -15,6 +26,11 @@ export default async function handler(req, res) {
 
     if (!contractText) {
       return res.status(400).json({ error: 'Contract text is required' });
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('OpenAI API key not configured');
+      return res.status(500).json({ error: 'OpenAI API key is not configured' });
     }
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -86,20 +102,36 @@ Return ONLY a valid JSON object with this structure:
 
 Only include clauses that are actually present in the contract. Do not include clauses that are missing.`;
 
+    console.log('Calling OpenAI for playbook comparison...');
     const { text } = await generateText({
       model: openai('gpt-4o'),
       prompt: prompt,
       temperature: 0.3,
+      maxRetries: 2,
     });
+
+    console.log('OpenAI response received, parsing...');
+
+    let cleanedText = text.trim();
+    if (cleanedText.startsWith("```json")) {
+      cleanedText = cleanedText.slice(7);
+    } else if (cleanedText.startsWith("```")) {
+      cleanedText = cleanedText.slice(3);
+    }
+    if (cleanedText.endsWith("```")) {
+      cleanedText = cleanedText.slice(0, -3);
+    }
+    cleanedText = cleanedText.trim();
 
     let analysisResult;
     try {
-      analysisResult = JSON.parse(text);
+      analysisResult = JSON.parse(cleanedText);
+      console.log('Successfully parsed playbook comparison result');
     } catch (parseError) {
-      console.error('Failed to parse AI response:', text);
+      console.error('Failed to parse AI response:', cleanedText.slice(0, 500));
       return res.status(500).json({
         error: 'Failed to parse analysis result',
-        details: text
+        details: parseError.message
       });
     }
 
