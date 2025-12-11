@@ -68,7 +68,7 @@ export default async function handler(req, res) {
     const systemPrompt = `
 You are a contract explainer for non-lawyers who outputs structured JSON.
 
-Read the full contract text and the contract type / country context provided by the user. Explain the contract in simple, plain language that a regular person can understand.
+Read the ENTIRE contract text thoroughly and identify ALL clauses present. Analyze EVERY single clause comprehensively, not just a subset. The contract type / country context will help make your analysis more relevant.
 
 You MUST return a JSON object with this EXACT structure (do NOT add any extra top-level keys):
 
@@ -116,8 +116,8 @@ Instructions:
 2. Additionally compute richer risk analysis:
    - riskOverview: A 2-3 sentence overall assessment of the main risks in this contract
 
-   - quantifiedRisks: Provide 3-10 of the most important risk items. For each risk:
-     * title: Short descriptive name for the risk
+   - quantifiedRisks: CRITICAL - Analyze EVERY clause in the contract and provide a risk assessment for ALL of them. Do NOT filter to only high-priority items. Include ALL clauses even if they have low risk. For each clause/risk:
+     * title: Short descriptive name for the clause or risk
      * riskLevel: Assess the SEVERITY of impact if it occurs as "High", "Medium", or "Low"
      * likelihood: Assess how likely this risk is to occur as "High", "Medium", "Low", or "Unknown"
      * overallRisk: Compute this using the risk matrix below based on riskLevel (severity) × likelihood:
@@ -137,13 +137,13 @@ Instructions:
        - Any severity + Unknown likelihood = use your best judgment (typically Medium)
 
      * potentialDamage: Quantify the loss if possible (e.g., "Up to ₹38,000", "Full deposit ₹1,10,000 at risk", "Up to one month rent"). If exact amounts aren't in the contract, give a qualitative description (e.g., "Significant financial penalties", "Loss of property rights")
-     * explanation: 1-3 sentences explaining the risk in simple, practical terms
+     * explanation: 1-3 sentences explaining what this clause means and why it is or isn't a risk in simple, practical terms
 
-   - mitigationSteps: Provide 3-10 items describing what the user can do to reduce or manage those risks. For each:
+   - mitigationSteps: For EVERY identified risk or unfavorable clause, provide mitigation steps. Each item should have:
      * title: Clear title of what this mitigation addresses
      * steps: Array of 2-5 concrete, practical actions the user can take
 
-   - complianceProcesses: Provide 3-10 items describing ongoing processes/checklists to stay compliant with important clauses. For each:
+   - complianceProcesses: For EVERY clause that requires ongoing compliance, provide a process. Each item should have:
      * title: The clause or obligation being addressed
      * process: Array of 2-5 recurring or systematic actions (e.g., monthly payment reminders, documentation practices, inspection checklists)
 
@@ -156,6 +156,7 @@ Instructions:
    - Do NOT provide legal advice; only explain meaning and potential risks
    - Use the contract type and country context to make your analysis more relevant and specific
    - When computing overallRisk, strictly follow the risk matrix provided above
+   - IMPORTANT: Do NOT filter or prioritize - include ALL clauses in your analysis
 `;
 
     const userPrompt = `
@@ -178,7 +179,7 @@ ${trimmed}
       const result = await generateText({
         model: openai("gpt-4o-mini"),
         temperature: 0.2,
-        maxTokens: 4000,
+        maxTokens: 8000,
         system: systemPrompt,
         prompt: userPrompt,
         maxRetries: 2,

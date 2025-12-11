@@ -63,20 +63,23 @@ PLAYBOOK CLAUSES:
 ${JSON.stringify(playbookContext, null, 2)}
 
 INSTRUCTIONS:
-1. Identify which playbook clauses are present in the contract
-2. For each identified clause, determine the favorability level:
+1. Read the ENTIRE contract text thoroughly from beginning to end
+2. For EACH playbook clause, carefully search the contract to determine if a similar or related clause is present
+3. For each identified clause found in the contract, determine the favorability level:
    - "favorable": Language is in our favor or meets standard expectations
    - "acceptable": Minor deviations from standard but within acceptable limits
    - "needs_review": Significant deviations requiring careful consideration
    - "red_flag": Unacceptable positions or high-risk language
 
-3. For each identified clause, provide:
+4. For each identified clause, provide:
    - clause_title: The title from the playbook
-   - found_text: The actual text from the contract (quote verbatim)
+   - found_text: The actual text from the contract (quote verbatim or summarize if too long)
    - favorability: One of the four levels above
-   - explanation: Why you assigned this favorability level
+   - explanation: Why you assigned this favorability level and how the contract language compares to the playbook standard
    - deviation: How the contract language differs from standard (if applicable)
-   - recommendation: What action should be taken
+   - recommendation: What specific action should be taken
+
+5. IMPORTANT: Be thorough in your search. Check for variations, paraphrases, and related language. A clause might be present even if worded differently than the playbook example.
 
 Return ONLY a valid JSON object with this structure:
 {
@@ -100,7 +103,7 @@ Return ONLY a valid JSON object with this structure:
   "summary": "A brief 2-3 sentence summary of the overall contract favorability"
 }
 
-Only include clauses that are actually present in the contract. Do not include clauses that are missing.`;
+Only include clauses that are actually present in the contract. Do not include clauses that are missing from the contract.`;
 
     console.log('Calling OpenAI for playbook comparison...');
     const { text } = await generateText({
