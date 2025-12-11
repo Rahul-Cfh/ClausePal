@@ -379,6 +379,11 @@ Return ONLY a valid JSON object with this structure:
     };
 
     console.log("Step 9: Sending success response to client");
+    console.log("Response includes playbookComparison:", !!playbookComparison);
+    if (playbookComparison) {
+      console.log("PlaybookComparison totalClauses:", playbookComparison.overallScore?.totalClauses);
+      console.log("PlaybookComparison clauseAnalysis length:", playbookComparison.clauseAnalysis?.length);
+    }
     return res.status(200).json(responseData);
   } catch (err) {
     console.log("=== CRITICAL ERROR ===");
