@@ -3,7 +3,36 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, Download, Upload, FileText, X } from "lucide-react";
+import { QuickDecisionDashboard } from "@/components/QuickDecisionDashboard";
+import { ClauseAnalysis } from "@/components/ClauseAnalysis";
+
+type ClauseAnalysisItem = {
+  clauseText: string;
+  matchedPlaybookClause: string;
+  summary: string;
+  issues: string[];
+  unacceptablePositions: string[];
+  questions: string[];
+  mitigation: string[];
+  recommendedEdit: string;
+  deviation: 'low' | 'medium' | 'high' | 'unacceptable';
+  favourabilityScore: number;
+  risk: 'low' | 'medium' | 'high' | 'critical';
+};
+
+type PlaybookComparison = {
+  clauseAnalysis: ClauseAnalysisItem[];
+  overallScore: {
+    averageFavourability: number;
+    totalClauses: number;
+    lowRisk: number;
+    mediumRisk: number;
+    highRisk: number;
+    criticalRisk: number;
+  };
+  summary: string;
+};
 
 type AnalysisResult = {
   summary: string;
@@ -12,6 +41,23 @@ type AnalysisResult = {
   risks: string[];
   questions: string[];
   note: string;
+  riskOverview?: string;
+  quantifiedRisks?: Array<{
+    title: string;
+    riskLevel: "High" | "Medium" | "Low";
+    likelihood?: "High" | "Medium" | "Low";
+    potentialDamage?: string;
+    explanation: string;
+  }>;
+  mitigationSteps?: Array<{
+    title: string;
+    steps: string[];
+  }>;
+  complianceProcesses?: Array<{
+    title: string;
+    process: string[];
+  }>;
+  playbookComparison?: PlaybookComparison | null;
 };
 
 export default function AnalyzePage() {
@@ -21,14 +67,123 @@ export default function AnalyzePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isProcessingPDF, setIsProcessingPDF] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const extractTextFromPDF = async (file: File): Promise<string> => {
+    const { extractTextFromPDFWithFallback } = await import('@/lib/pdfExtraction');
+    return extractTextFromPDFWithFallback(file);
+  };
+
+  const handleFileUpload = async (file: File) => {
+    if (!file) return;
+
+    if (file.type !== 'application/pdf') {
+      setError('Please upload a PDF file. Only PDF format is supported.');
+      return;
+    }
+
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setError('File size exceeds 10MB. Please upload a smaller file or compress the PDF.');
+      return;
+    }
+
+    if (file.size === 0) {
+      setError('The uploaded file appears to be empty. Please check the file and try again.');
+      return;
+    }
+
+    setUploadedFile(file);
+    setIsProcessingPDF(true);
+    setError(null);
+
+    console.log(`[Upload] Processing file: ${file.name}, Size: ${(file.size / 1024).toFixed(2)} KB`);
+
+    try {
+      const startTime = Date.now();
+      const extractedText = await extractTextFromPDF(file);
+
+      console.log(`[Upload] Extraction completed in ${Date.now() - startTime}ms`);
+
+      if (!extractedText || extractedText.trim().length === 0) {
+        throw new Error('No text could be extracted from this PDF. The file may be:\n\n• Image-based or scanned (requires OCR)\n• Completely blank\n• Using an unsupported encoding\n\nPlease try a different PDF or convert your document to a text-based format.');
+      }
+
+      if (extractedText.length < 50) {
+        console.warn('[Upload] Very little text extracted:', extractedText.length, 'chars');
+        setError(`Warning: Only ${extractedText.length} characters were extracted. The PDF may be mostly images. Consider using a text-based PDF for better results.`);
+      }
+
+      console.log(`[Upload] Successfully extracted ${extractedText.length} characters`);
+      setContractText(extractedText);
+      setIsProcessingPDF(false);
+
+      console.log('[Upload] Starting automatic analysis...');
+      await performAnalysis(extractedText);
+    } catch (err) {
+      console.error('[Upload] Error extracting text from PDF:', err);
+
+      let errorMessage = 'Failed to extract text from PDF. Please try again.';
+
+      if (err instanceof Error) {
+        if (err.message.includes('password') || err.message.includes('encrypted')) {
+          errorMessage = 'This PDF is password-protected or encrypted. Please provide an unlocked version of the document.';
+        } else if (err.message.includes('Invalid PDF') || err.message.includes('corrupted')) {
+          errorMessage = 'The PDF file appears to be corrupted or invalid. Please check the file and try again, or try saving it as a new PDF.';
+        } else if (err.message.includes('No text')) {
+          errorMessage = err.message;
+        } else if (err.message.includes('network') || err.message.includes('fetch')) {
+          errorMessage = 'Network error while processing PDF. Please check your connection and try again.';
+        } else {
+          errorMessage = `Error: ${err.message}`;
+        }
+      }
+
+      setError(errorMessage);
+      setIsProcessingPDF(false);
+      setUploadedFile(null);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
+
+  const removeFile = () => {
+    setUploadedFile(null);
+    setContractText('');
+  };
+
+  const performAnalysis = async (textToAnalyze: string) => {
     setError(null);
     setResult(null);
 
-    if (!contractText.trim()) {
-      setError("Please paste a contract to analyze.");
+    if (!textToAnalyze.trim()) {
+      setError("No contract text available to analyze.");
       return;
     }
 
@@ -39,7 +194,7 @@ export default function AnalyzePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contractText,
+          contractText: textToAnalyze,
           contractType,
           country,
         }),
@@ -73,6 +228,11 @@ export default function AnalyzePage() {
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await performAnalysis(contractText);
+  };
+
   const downloadResults = () => {
     if (!result) return;
 
@@ -84,10 +244,66 @@ export default function AnalyzePage() {
       return items.map(item => `  - ${item}`).join('\n');
     };
 
+    let playbookSection = '';
+    if (result.playbookComparison && result.playbookComparison.overallScore.totalClauses > 0) {
+      const pb = result.playbookComparison;
+      const healthScore = Math.round(pb.overallScore.averageFavourability * 10);
+      playbookSection = `
+================================================================================
+
+QUICK DECISION DASHBOARD
+
+Contract Health Score: ${healthScore}%
+Average Favourability: ${pb.overallScore.averageFavourability.toFixed(1)}/10
+
+Clauses Analyzed: ${pb.overallScore.totalClauses}
+  - Low Risk: ${pb.overallScore.lowRisk}
+  - Medium Risk: ${pb.overallScore.mediumRisk}
+  - High Risk: ${pb.overallScore.highRisk}
+  - Critical: ${pb.overallScore.criticalRisk}
+
+Summary: ${pb.summary}
+
+================================================================================
+
+CLAUSE-BY-CLAUSE ANALYSIS
+
+${pb.clauseAnalysis.map((clause, idx) => `
+${idx + 1}. ${clause.matchedPlaybookClause}
+   Risk Level: ${clause.risk.toUpperCase()}
+   Favourability Score: ${clause.favourabilityScore}/10
+   Deviation: ${clause.deviation.toUpperCase()}
+
+   Summary:
+   ${clause.summary}
+
+   ${clause.issues.length > 0 ? `Issues Found:\n${clause.issues.map(i => `   - ${i}`).join('\n')}\n\n` : ''}
+   ${clause.unacceptablePositions.length > 0 ? `⚠ UNACCEPTABLE POSITIONS:\n${clause.unacceptablePositions.map(p => `   - ${p}`).join('\n')}\n\n` : ''}
+   Questions for Counterparty:
+${clause.questions.map(q => `   - ${q}`).join('\n')}
+
+   Mitigation Suggestions:
+${clause.mitigation.map(m => `   - ${m}`).join('\n')}
+
+   Recommended Alternative Language:
+   "${clause.recommendedEdit}"
+
+   Contract Text:
+   "${clause.clauseText}"
+`).join('\n')}
+
+================================================================================
+`;
+    }
+
     const content = `CONTRACT ANALYSIS REPORT
 Generated: ${new Date().toLocaleString()}
 Contract Type: ${contractType}
 Country/Region: ${country}
+${playbookSection}
+================================================================================
+
+COMPREHENSIVE ANALYSIS
 
 ================================================================================
 
@@ -163,7 +379,7 @@ legal advice. For important decisions, please speak to a qualified lawyer.
 
         <h1 className="text-3xl font-semibold mb-2">Analyze your contract</h1>
         <p className="text-slate-300 mb-6">
-          Paste your contract below and we&apos;ll break it down into simple,
+          Upload your contract PDF and we&apos;ll break it down into simple,
           human language. This is not legal advice.
         </p>
 
@@ -197,38 +413,125 @@ legal advice. For important decisions, please speak to a qualified lawyer.
           </div>
 
           <div>
-            <label className="block text-sm mb-1">
-              Paste your contract text here
+            <label className="block text-sm mb-2">
+              Upload your contract PDF
             </label>
-            <textarea
-              value={contractText}
-              onChange={(e) => setContractText(e.target.value)}
-              rows={16}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-mono"
-              placeholder="Paste the full contract text..."
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              For this MVP, we only support text. Remove any images or signatures.
-            </p>
+
+            {!uploadedFile ? (
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+                  isDragging
+                    ? 'border-emerald-500 bg-emerald-950/20'
+                    : 'border-slate-700 bg-slate-900/60 hover:border-slate-600'
+                }`}
+              >
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handleFileChange}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <Upload className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                <p className="text-sm text-slate-300 mb-1">
+                  Drag and drop your PDF here, or click to browse
+                </p>
+                <p className="text-xs text-slate-500">
+                  Supported format: PDF (max 10MB)
+                </p>
+              </div>
+            ) : (
+              <div className="border border-slate-700 bg-slate-900/60 rounded-lg p-4">
+                {isProcessingPDF ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-t-2 border-emerald-500"></div>
+                      <div>
+                        <p className="text-sm font-medium">Processing PDF...</p>
+                        <p className="text-xs text-slate-400">Extracting text from {uploadedFile.name}</p>
+                      </div>
+                    </div>
+                    <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-emerald-500 h-full rounded-full animate-pulse w-2/3"></div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <FileText className="w-8 h-8 text-emerald-500" />
+                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{uploadedFile.name}</p>
+                        <p className="text-xs text-slate-400">
+                          {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB • {contractText.length.toLocaleString()} characters extracted
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={removeFile}
+                      className="p-1 hover:bg-slate-800 rounded transition-colors"
+                      aria-label="Remove file"
+                    >
+                      <X className="w-5 h-5 text-slate-400 hover:text-slate-200" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="mt-2 space-y-1">
+              <p className="text-xs text-slate-500">
+                We extract text from your PDF automatically using advanced PDF parsing.
+              </p>
+              <p className="text-xs text-slate-500">
+                <strong>Note:</strong> Image-based PDFs or scanned documents require OCR and are not currently supported.
+              </p>
+            </div>
           </div>
 
           <button
             type="submit"
-            disabled={loading}
-            className="inline-flex items-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-900 disabled:opacity-60"
+            disabled={loading || isProcessingPDF || !contractText.trim()}
+            className="inline-flex items-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-900 disabled:opacity-60 disabled:cursor-not-allowed hover:bg-emerald-400 transition-colors"
           >
             {loading ? "Analyzing..." : "Explain this contract"}
           </button>
         </form>
 
         {error && (
-          <div className="mt-4 rounded-lg border border-red-500 bg-red-950/30 px-3 py-2 text-sm text-red-200">
-            {error}
+          <div className="mt-4 rounded-lg border border-red-500/50 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+            <div className="flex gap-2">
+              <span className="text-red-400 font-bold flex-shrink-0">⚠</span>
+              <div className="whitespace-pre-line">{error}</div>
+            </div>
           </div>
         )}
 
         {result && (
-          <div className="mt-8 space-y-4">
+          <div className="mt-8 space-y-6">
+            {result.playbookComparison && result.playbookComparison.overallScore.totalClauses > 0 && (
+              <>
+                <QuickDecisionDashboard
+                  overallScore={result.playbookComparison.overallScore}
+                  summary={result.playbookComparison.summary}
+                />
+
+                <ClauseAnalysis clauses={result.playbookComparison.clauseAnalysis} />
+
+                <div className="border-t-2 border-slate-700 pt-6">
+                  <h2 className="text-2xl font-semibold mb-4">Comprehensive Analysis</h2>
+                  <p className="text-slate-400 text-sm mb-4">
+                    Detailed breakdown of obligations, risks, and recommended actions
+                  </p>
+                </div>
+              </>
+            )}
+
             <SectionCard title="Plain English summary">
               <p className="text-sm leading-relaxed whitespace-pre-line">
                 {result.summary}
@@ -250,6 +553,78 @@ legal advice. For important decisions, please speak to a qualified lawyer.
             <SectionCard title="Questions to ask before signing">
               <BulletList items={result.questions} />
             </SectionCard>
+
+            {result.riskOverview && result.riskOverview.trim() && (
+              <SectionCard title="Risk overview">
+                <p className="text-sm leading-relaxed whitespace-pre-line">
+                  {result.riskOverview}
+                </p>
+              </SectionCard>
+            )}
+
+            {result.quantifiedRisks && result.quantifiedRisks.length > 0 && (
+              <RiskMatrix />
+            )}
+
+            {result.quantifiedRisks && result.quantifiedRisks.length > 0 && (
+              <SectionCard title="Quantified risks">
+                <div className="space-y-4">
+                  {result.quantifiedRisks.map((risk, idx) => (
+                    <div key={idx} className="space-y-1">
+                      <p className="text-sm font-semibold">{risk.title}</p>
+                      <p className="text-xs text-slate-400">
+                        Risk level: {risk.riskLevel}
+                        {risk.likelihood && `, Likelihood: ${risk.likelihood}`}
+                      </p>
+                      {risk.potentialDamage && (
+                        <p className="text-xs text-slate-400">
+                          Potential damage: {risk.potentialDamage}
+                        </p>
+                      )}
+                      <p className="text-sm leading-relaxed">{risk.explanation}</p>
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+            )}
+
+            {result.mitigationSteps && result.mitigationSteps.length > 0 && (
+              <SectionCard title="Mitigation steps">
+                <div className="space-y-4">
+                  {result.mitigationSteps.map((mitigation, idx) => (
+                    <div key={idx}>
+                      <p className="text-sm font-semibold mb-2">{mitigation.title}</p>
+                      <ul className="list-disc pl-5 space-y-1 text-sm">
+                        {mitigation.steps.map((step, stepIdx) => (
+                          <li key={stepIdx} className="leading-snug">
+                            {step}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+            )}
+
+            {result.complianceProcesses && result.complianceProcesses.length > 0 && (
+              <SectionCard title="Compliance process">
+                <div className="space-y-4">
+                  {result.complianceProcesses.map((compliance, idx) => (
+                    <div key={idx}>
+                      <p className="text-sm font-semibold mb-2">{compliance.title}</p>
+                      <ul className="list-disc pl-5 space-y-1 text-sm">
+                        {compliance.process.map((step, stepIdx) => (
+                          <li key={stepIdx} className="leading-snug">
+                            {step}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+            )}
 
             <button
               onClick={downloadResults}
@@ -302,5 +677,45 @@ function BulletList({ items }: { items: string[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function RiskMatrix() {
+  return (
+    <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-4">
+      <h3 className="text-sm font-semibold mb-3">Risk Assessment Matrix</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="bg-slate-900">
+              <th className="border border-slate-700 p-2 text-left">Severity ↓ / Likelihood →</th>
+              <th className="border border-slate-700 p-2">Low</th>
+              <th className="border border-slate-700 p-2">Medium</th>
+              <th className="border border-slate-700 p-2">High</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border border-slate-700 p-2 font-medium">Low</td>
+              <td className="border border-slate-700 p-2 text-center bg-green-950/40 text-green-300">Low</td>
+              <td className="border border-slate-700 p-2 text-center bg-green-950/40 text-green-300">Low</td>
+              <td className="border border-slate-700 p-2 text-center bg-yellow-950/40 text-yellow-300">Medium</td>
+            </tr>
+            <tr>
+              <td className="border border-slate-700 p-2 font-medium">Medium</td>
+              <td className="border border-slate-700 p-2 text-center bg-green-950/40 text-green-300">Low</td>
+              <td className="border border-slate-700 p-2 text-center bg-yellow-950/40 text-yellow-300">Medium</td>
+              <td className="border border-slate-700 p-2 text-center bg-orange-950/40 text-orange-300">High</td>
+            </tr>
+            <tr>
+              <td className="border border-slate-700 p-2 font-medium">High</td>
+              <td className="border border-slate-700 p-2 text-center bg-yellow-950/40 text-yellow-300">Medium</td>
+              <td className="border border-slate-700 p-2 text-center bg-orange-950/40 text-orange-300">High</td>
+              <td className="border border-slate-700 p-2 text-center bg-red-950/40 text-red-300">Critical</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
