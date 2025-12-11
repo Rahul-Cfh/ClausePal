@@ -1,6 +1,8 @@
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+if (typeof window !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+}
 
 export type PDFExtractionError = {
   type: 'no_text' | 'encrypted' | 'corrupted' | 'unsupported' | 'server_error';
@@ -24,6 +26,7 @@ export async function extractTextFromPDFClient(file: File): Promise<string> {
     const loadingTask = pdfjsLib.getDocument({
       data: uint8Array,
       useSystemFonts: true,
+      standardFontDataUrl: `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/standard_fonts/`,
     });
 
     const pdfDocument = await loadingTask.promise;
@@ -58,9 +61,26 @@ export async function extractTextFromPDFClient(file: File): Promise<string> {
     console.log(`[Client PDF] Total extracted: ${fullText.trim().length} chars`);
 
     return fullText.trim();
-  } catch (error) {
+  } catch (error: any) {
     console.error('[Client PDF] Extraction error:', error);
-    throw error;
+
+    if (error?.message?.includes('password') || error?.message?.includes('encrypted')) {
+      throw new Error('This PDF is password-protected or encrypted.');
+    }
+
+    if (error?.message?.includes('Invalid PDF')) {
+      throw new Error('Invalid or corrupted PDF file.');
+    }
+
+    if (error?.name === 'InvalidPDFException') {
+      throw new Error('Invalid PDF file format.');
+    }
+
+    if (error?.name === 'PasswordException') {
+      throw new Error('This PDF is password-protected.');
+    }
+
+    throw new Error(error?.message || 'Failed to extract text from PDF');
   }
 }
 
