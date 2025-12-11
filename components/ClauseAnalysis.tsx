@@ -8,6 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { CheckCircle2, AlertCircle, AlertTriangle, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ClauseAnalysisItem {
+  clauseTitle: string;
   clauseText: string;
   matchedPlaybookClause: string;
   summary: string;
@@ -18,6 +19,7 @@ interface ClauseAnalysisItem {
   recommendedEdit: string;
   deviation: 'low' | 'medium' | 'high' | 'unacceptable';
   favourabilityScore: number;
+  favourabilityPercentage: number;
   risk: 'low' | 'medium' | 'high' | 'critical';
 }
 
@@ -156,8 +158,9 @@ export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
                   <div className="flex items-start gap-3 flex-1">
                     {getRiskIcon(clause.risk)}
                     <div className="flex-1">
-                      <CardTitle className="text-lg">{clause.matchedPlaybookClause}</CardTitle>
-                      <p className="text-xs text-gray-500 mt-1">Deviation: {clause.deviation.toUpperCase()}</p>
+                      <CardTitle className="text-lg">{clause.clauseTitle}</CardTitle>
+                      <p className="text-xs text-gray-500 mt-1">Playbook Match: {clause.matchedPlaybookClause}</p>
+                      <p className="text-xs text-gray-500">Deviation: {clause.deviation.toUpperCase()}</p>
                     </div>
                   </div>
                   {getRiskBadge(clause.risk, clause.favourabilityScore)}

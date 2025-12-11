@@ -68,6 +68,7 @@ INSTRUCTIONS:
 3. For each identified clause found in the contract, provide comprehensive analysis
 
 4. For each clause, you MUST provide ALL of the following fields:
+   - clauseTitle: A short, human-readable title for the clause (e.g., "CONFIDENTIAL INFORMATION", "DATA SECURITY", "INTELLECTUAL PROPERTY", "LIMITATION OF LIABILITY")
    - clauseText: The actual verbatim text from the contract (quote directly, max 500 chars)
    - matchedPlaybookClause: The title of the playbook clause this matches
    - summary: A concise 1-2 sentence plain English summary of what this clause means
@@ -77,12 +78,13 @@ INSTRUCTIONS:
    - mitigation: Array of 2-4 concrete suggestions to reduce risk or improve the clause
    - recommendedEdit: Provide alternative language that would be more favorable (specific text suggestion)
    - deviation: Assess deviation level from playbook standard as one of: "low", "medium", "high", or "unacceptable"
-   - favourabilityScore: Rate from 1-10 where:
+   - favourabilityScore: Rate from 0-10 where:
      * 10 = fully aligned with playbook, highly favorable
      * 7-9 = minor acceptable deviations, still favorable
      * 4-6 = moderate deviations requiring review
      * 1-3 = major deviations, unfavorable
      * 0 = contains unacceptable position
+   - favourabilityPercentage: Simply favourabilityScore * 10 (an integer from 0-100)
    - risk: Overall risk rating as one of: "low", "medium", "high", or "critical" (use "critical" if unacceptable)
 
 5. Be thorough. Check for variations, paraphrases, and related language.
@@ -93,6 +95,7 @@ Return ONLY a valid JSON object with this structure:
 {
   "clauseAnalysis": [
     {
+      "clauseTitle": "string",
       "clauseText": "string",
       "matchedPlaybookClause": "string",
       "summary": "string",
@@ -103,6 +106,7 @@ Return ONLY a valid JSON object with this structure:
       "recommendedEdit": "string",
       "deviation": "low" | "medium" | "high" | "unacceptable",
       "favourabilityScore": number (0-10),
+      "favourabilityPercentage": number (0-100),
       "risk": "low" | "medium" | "high" | "critical"
     }
   ],

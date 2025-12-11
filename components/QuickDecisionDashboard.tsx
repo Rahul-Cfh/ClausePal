@@ -4,6 +4,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, AlertCircle, AlertTriangle, XCircle } from 'lucide-react';
 
+interface ClauseItem {
+  clauseTitle: string;
+  favourabilityPercentage: number;
+  risk: 'low' | 'medium' | 'high' | 'critical';
+  deviation: 'low' | 'medium' | 'high' | 'unacceptable';
+}
+
 interface OverallScore {
   averageFavourability: number;
   totalClauses: number;
@@ -14,11 +21,12 @@ interface OverallScore {
 }
 
 interface QuickDecisionDashboardProps {
+  clauses: ClauseItem[];
   overallScore: OverallScore;
   summary: string;
 }
 
-export function QuickDecisionDashboard({ overallScore, summary }: QuickDecisionDashboardProps) {
+export function QuickDecisionDashboard({ clauses, overallScore, summary }: QuickDecisionDashboardProps) {
   const healthScore = Math.round(overallScore.averageFavourability * 10);
 
   const getHealthColor = (score: number) => {
@@ -42,10 +50,37 @@ export function QuickDecisionDashboard({ overallScore, summary }: QuickDecisionD
     return 'Significant Concerns';
   };
 
-  const lowRiskPercent = overallScore.totalClauses > 0 ? Math.round((overallScore.lowRisk / overallScore.totalClauses) * 100) : 0;
-  const mediumRiskPercent = overallScore.totalClauses > 0 ? Math.round((overallScore.mediumRisk / overallScore.totalClauses) * 100) : 0;
-  const highRiskPercent = overallScore.totalClauses > 0 ? Math.round((overallScore.highRisk / overallScore.totalClauses) * 100) : 0;
-  const criticalRiskPercent = overallScore.totalClauses > 0 ? Math.round((overallScore.criticalRisk / overallScore.totalClauses) * 100) : 0;
+  const getFavourabilityColor = (percentage: number) => {
+    if (percentage >= 70) return 'bg-green-500';
+    if (percentage >= 40) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
+
+  const getFavourabilityTextColor = (percentage: number) => {
+    if (percentage >= 70) return 'text-green-700';
+    if (percentage >= 40) return 'text-yellow-700';
+    return 'text-red-700';
+  };
+
+  const getRiskBadge = (risk: string) => {
+    const badges = {
+      low: <Badge className="bg-green-100 text-green-800 border-green-300">Low</Badge>,
+      medium: <Badge className="bg-blue-100 text-blue-800 border-blue-300">Medium</Badge>,
+      high: <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">High</Badge>,
+      critical: <Badge className="bg-red-100 text-red-800 border-red-300">Critical</Badge>,
+    };
+    return badges[risk as keyof typeof badges] || badges.low;
+  };
+
+  const getDeviationBadge = (deviation: string) => {
+    const badges = {
+      low: <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">Low</Badge>,
+      medium: <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">Medium</Badge>,
+      high: <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">High</Badge>,
+      unacceptable: <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">Unacceptable</Badge>,
+    };
+    return badges[deviation as keyof typeof badges] || badges.low;
+  };
 
   return (
     <Card className={`border-2 ${getHealthBgColor(healthScore)}`}>
@@ -73,57 +108,41 @@ export function QuickDecisionDashboard({ overallScore, summary }: QuickDecisionD
           </div>
         </div>
 
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-green-600" />
-              <span className="font-medium">Low Risk</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-sm text-gray-600">{lowRiskPercent}%</div>
-              <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
-                {overallScore.lowRisk}
-              </Badge>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-blue-600" />
-              <span className="font-medium">Medium Risk</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-sm text-gray-600">{mediumRiskPercent}%</div>
-              <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
-                {overallScore.mediumRisk}
-              </Badge>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-yellow-600" />
-              <span className="font-medium">High Risk</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-sm text-gray-600">{highRiskPercent}%</div>
-              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
-                {overallScore.highRisk}
-              </Badge>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <XCircle className="w-5 h-5 text-red-600" />
-              <span className="font-medium">Critical</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-sm text-gray-600">{criticalRiskPercent}%</div>
-              <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">
-                {overallScore.criticalRisk}
-              </Badge>
-            </div>
+        <div className="pt-4 border-t">
+          <h4 className="font-semibold text-sm mb-3">Clause-by-Clause Analysis</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-2 font-semibold text-gray-700">Clause</th>
+                  <th className="text-left py-2 px-2 font-semibold text-gray-700 w-64">Favourability</th>
+                  <th className="text-center py-2 px-2 font-semibold text-gray-700">Risk</th>
+                  <th className="text-center py-2 px-2 font-semibold text-gray-700">Deviation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clauses.map((clause, index) => (
+                  <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-3 px-2 font-medium">{clause.clauseTitle}</td>
+                    <td className="py-3 px-2">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-gray-200 rounded-full h-4 overflow-hidden">
+                          <div
+                            className={`h-full ${getFavourabilityColor(clause.favourabilityPercentage)} transition-all`}
+                            style={{ width: `${clause.favourabilityPercentage}%` }}
+                          ></div>
+                        </div>
+                        <span className={`text-xs font-semibold w-12 text-right ${getFavourabilityTextColor(clause.favourabilityPercentage)}`}>
+                          {clause.favourabilityPercentage}%
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-2 text-center">{getRiskBadge(clause.risk)}</td>
+                    <td className="py-3 px-2 text-center">{getDeviationBadge(clause.deviation)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
 

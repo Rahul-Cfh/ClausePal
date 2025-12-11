@@ -8,6 +8,7 @@ import { QuickDecisionDashboard } from "@/components/QuickDecisionDashboard";
 import { ClauseAnalysis } from "@/components/ClauseAnalysis";
 
 type ClauseAnalysisItem = {
+  clauseTitle: string;
   clauseText: string;
   matchedPlaybookClause: string;
   summary: string;
@@ -18,6 +19,7 @@ type ClauseAnalysisItem = {
   recommendedEdit: string;
   deviation: 'low' | 'medium' | 'high' | 'unacceptable';
   favourabilityScore: number;
+  favourabilityPercentage: number;
   risk: 'low' | 'medium' | 'high' | 'critical';
 };
 
@@ -334,6 +336,7 @@ legal advice. For important decisions, please speak to a qualified lawyer.
             {result.playbookComparison && result.playbookComparison.overallScore.totalClauses > 0 && (
               <>
                 <QuickDecisionDashboard
+                  clauses={result.playbookComparison.clauseAnalysis}
                   overallScore={result.playbookComparison.overallScore}
                   summary={result.playbookComparison.summary}
                 />
