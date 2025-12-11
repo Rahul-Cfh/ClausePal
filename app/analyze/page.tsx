@@ -66,23 +66,21 @@ export default function AnalyzePage() {
   const [isProcessingPDF, setIsProcessingPDF] = useState(false);
 
   const extractTextFromPDF = async (file: File): Promise<string> => {
-    const pdfjsLib = await import('pdfjs-dist');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+    const formData = new FormData();
+    formData.append('file', file);
 
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    let fullText = '';
+    const response = await fetch('/api/extract-pdf-text', {
+      method: 'POST',
+      body: formData,
+    });
 
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(' ');
-      fullText += pageText + '\n';
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to extract text from PDF');
     }
 
-    return fullText;
+    const data = await response.json();
+    return data.text;
   };
 
   const handleFileUpload = async (file: File) => {
@@ -93,17 +91,29 @@ export default function AnalyzePage() {
       return;
     }
 
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setError('File size exceeds 10MB. Please upload a smaller file.');
+      return;
+    }
+
     setUploadedFile(file);
     setIsProcessingPDF(true);
     setError(null);
 
     try {
       const extractedText = await extractTextFromPDF(file);
+
+      if (!extractedText || extractedText.trim().length === 0) {
+        throw new Error('No text could be extracted from the PDF. The file may be scanned or image-based.');
+      }
+
       setContractText(extractedText);
       setIsProcessingPDF(false);
     } catch (err) {
       console.error('Error extracting text from PDF:', err);
-      setError('Failed to extract text from PDF. Please try again.');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to extract text from PDF. Please try again.';
+      setError(errorMessage);
       setIsProcessingPDF(false);
       setUploadedFile(null);
     }
