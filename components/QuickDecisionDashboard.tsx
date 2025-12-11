@@ -5,10 +5,13 @@ import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, AlertCircle, AlertTriangle, XCircle } from 'lucide-react';
 
 interface ClauseItem {
+  clauseNumber?: string;
   clauseTitle: string;
   favourabilityPercentage: number;
   risk: 'low' | 'medium' | 'high' | 'critical';
-  deviation: 'low' | 'medium' | 'high' | 'unacceptable';
+  deviation: 'low' | 'medium' | 'high' | 'unacceptable' | 'no_playbook';
+  playbookMatchFound?: boolean;
+  matchedPlaybookClause?: string;
 }
 
 interface OverallScore {
@@ -18,6 +21,8 @@ interface OverallScore {
   mediumRisk: number;
   highRisk: number;
   criticalRisk: number;
+  playbookMatchedClauses?: number;
+  noPlaybookMatchClauses?: number;
 }
 
 interface QuickDecisionDashboardProps {
@@ -78,6 +83,7 @@ export function QuickDecisionDashboard({ clauses, overallScore, summary }: Quick
       medium: <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">Medium</Badge>,
       high: <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">High</Badge>,
       unacceptable: <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">Unacceptable</Badge>,
+      no_playbook: <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-300">No Playbook</Badge>,
     };
     return badges[deviation as keyof typeof badges] || badges.low;
   };
@@ -105,6 +111,11 @@ export function QuickDecisionDashboard({ clauses, overallScore, summary }: Quick
             <div className="text-sm font-medium text-gray-600 mb-2">Clauses Analyzed</div>
             <div className="text-3xl font-bold text-gray-900">{overallScore.totalClauses}</div>
             <div className="text-xs text-gray-500 mt-1">Avg Score: {overallScore.averageFavourability.toFixed(1)}/10</div>
+            {(overallScore.playbookMatchedClauses !== undefined || overallScore.noPlaybookMatchClauses !== undefined) && (
+              <div className="text-xs text-gray-500 mt-1">
+                {overallScore.playbookMatchedClauses || 0} playbook matched • {overallScore.noPlaybookMatchClauses || 0} unmatched
+              </div>
+            )}
           </div>
         </div>
 
@@ -123,7 +134,19 @@ export function QuickDecisionDashboard({ clauses, overallScore, summary }: Quick
               <tbody>
                 {clauses.map((clause, index) => (
                   <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-2 font-medium">{clause.clauseTitle}</td>
+                    <td className="py-3 px-2 font-medium">
+                      <div className="flex items-center gap-2">
+                        {clause.clauseNumber && (
+                          <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                            {clause.clauseNumber}
+                          </span>
+                        )}
+                        <span>{clause.clauseTitle}</span>
+                      </div>
+                      {clause.playbookMatchFound === false && (
+                        <span className="text-xs text-gray-500 italic">No playbook match</span>
+                      )}
+                    </td>
                     <td className="py-3 px-2">
                       <div className="flex items-center gap-2">
                         <div className="flex-1 bg-gray-200 rounded-full h-4 overflow-hidden">

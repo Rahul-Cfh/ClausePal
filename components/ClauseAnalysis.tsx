@@ -8,16 +8,18 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { CheckCircle2, AlertCircle, AlertTriangle, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ClauseAnalysisItem {
+  clauseNumber?: string;
   clauseTitle: string;
   clauseText: string;
   matchedPlaybookClause: string;
+  playbookMatchFound?: boolean;
   summary: string;
   issues: string[];
   unacceptablePositions: string[];
   questions: string[];
   mitigation: string[];
   recommendedEdit: string;
-  deviation: 'low' | 'medium' | 'high' | 'unacceptable';
+  deviation: 'low' | 'medium' | 'high' | 'unacceptable' | 'no_playbook';
   favourabilityScore: number;
   favourabilityPercentage: number;
   risk: 'low' | 'medium' | 'high' | 'critical';
@@ -158,9 +160,19 @@ export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
                   <div className="flex items-start gap-3 flex-1">
                     {getRiskIcon(clause.risk)}
                     <div className="flex-1">
-                      <CardTitle className="text-lg">{clause.clauseTitle}</CardTitle>
-                      <p className="text-xs text-gray-500 mt-1">Playbook Match: {clause.matchedPlaybookClause}</p>
-                      <p className="text-xs text-gray-500">Deviation: {clause.deviation.toUpperCase()}</p>
+                      <div className="flex items-center gap-2 mb-1">
+                        {clause.clauseNumber && (
+                          <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                            {clause.clauseNumber}
+                          </span>
+                        )}
+                        <CardTitle className="text-lg">{clause.clauseTitle}</CardTitle>
+                      </div>
+                      <p className={`text-xs mt-1 ${clause.playbookMatchFound === false ? 'text-orange-600 font-semibold' : 'text-gray-500'}`}>
+                        Playbook Match: {clause.matchedPlaybookClause}
+                        {clause.playbookMatchFound === false && ' ⚠'}
+                      </p>
+                      <p className="text-xs text-gray-500">Deviation: {clause.deviation.toUpperCase().replace('_', ' ')}</p>
                     </div>
                   </div>
                   {getRiskBadge(clause.risk, clause.favourabilityScore)}
