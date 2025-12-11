@@ -4,6 +4,29 @@ import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowLeft, Download } from "lucide-react";
+import { QuickDecisionDashboard } from "@/components/QuickDecisionDashboard";
+import { ClauseAnalysis } from "@/components/ClauseAnalysis";
+
+type ClauseAnalysisItem = {
+  clause_title: string;
+  found_text: string;
+  favorability: 'favorable' | 'acceptable' | 'needs_review' | 'red_flag';
+  explanation: string;
+  deviation: string | null;
+  recommendation: string;
+};
+
+type PlaybookComparison = {
+  clauseAnalysis: ClauseAnalysisItem[];
+  overallScore: {
+    favorable: number;
+    acceptable: number;
+    needs_review: number;
+    red_flag: number;
+    total: number;
+  };
+  summary: string;
+};
 
 type AnalysisResult = {
   summary: string;
@@ -28,6 +51,7 @@ type AnalysisResult = {
     title: string;
     process: string[];
   }>;
+  playbookComparison?: PlaybookComparison | null;
 };
 
 export default function AnalyzePage() {
@@ -100,10 +124,58 @@ export default function AnalyzePage() {
       return items.map(item => `  - ${item}`).join('\n');
     };
 
+    let playbookSection = '';
+    if (result.playbookComparison && result.playbookComparison.overallScore.total > 0) {
+      const pb = result.playbookComparison;
+      playbookSection = `
+================================================================================
+
+QUICK DECISION DASHBOARD
+
+Contract Health Score: ${Math.round(
+        ((pb.overallScore.favorable * 4 + pb.overallScore.acceptable * 3 +
+          pb.overallScore.needs_review * 1.5) / (pb.overallScore.total * 4)) * 100
+      )}%
+
+Clauses Analyzed: ${pb.overallScore.total}
+  - Favorable: ${pb.overallScore.favorable}
+  - Acceptable: ${pb.overallScore.acceptable}
+  - Needs Review: ${pb.overallScore.needs_review}
+  - Red Flags: ${pb.overallScore.red_flag}
+
+Summary: ${pb.summary}
+
+================================================================================
+
+CLAUSE-BY-CLAUSE ANALYSIS
+
+${pb.clauseAnalysis.map((clause, idx) => `
+${idx + 1}. ${clause.clause_title}
+   Favorability: ${clause.favorability.toUpperCase().replace('_', ' ')}
+
+   Analysis:
+   ${clause.explanation}
+
+   ${clause.deviation ? `Deviation from Standard:\n   ${clause.deviation}\n   ` : ''}
+   Recommendation:
+   ${clause.recommendation}
+
+   Contract Text:
+   "${clause.found_text}"
+`).join('\n')}
+
+================================================================================
+`;
+    }
+
     const content = `CONTRACT ANALYSIS REPORT
 Generated: ${new Date().toLocaleString()}
 Contract Type: ${contractType}
 Country/Region: ${country}
+${playbookSection}
+================================================================================
+
+COMPREHENSIVE ANALYSIS
 
 ================================================================================
 
@@ -244,7 +316,25 @@ legal advice. For important decisions, please speak to a qualified lawyer.
         )}
 
         {result && (
-          <div className="mt-8 space-y-4">
+          <div className="mt-8 space-y-6">
+            {result.playbookComparison && result.playbookComparison.overallScore.total > 0 && (
+              <>
+                <QuickDecisionDashboard
+                  overallScore={result.playbookComparison.overallScore}
+                  summary={result.playbookComparison.summary}
+                />
+
+                <ClauseAnalysis clauses={result.playbookComparison.clauseAnalysis} />
+
+                <div className="border-t-2 border-slate-700 pt-6">
+                  <h2 className="text-2xl font-semibold mb-4">Comprehensive Analysis</h2>
+                  <p className="text-slate-400 text-sm mb-4">
+                    Detailed breakdown of obligations, risks, and recommended actions
+                  </p>
+                </div>
+              </>
+            )}
+
             <SectionCard title="Plain English summary">
               <p className="text-sm leading-relaxed whitespace-pre-line">
                 {result.summary}

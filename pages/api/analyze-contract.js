@@ -225,8 +225,34 @@ ${trimmed}
     });
     console.log("Step 7: Final JSON parsed ✓");
 
-    console.log("Step 8: Sending success response to client");
-    return res.status(200).json(finalJson);
+    console.log("Step 8: Fetching playbook comparison...");
+    let playbookComparison = null;
+    try {
+      const playbookResponse = await fetch(`${req.headers.origin || 'http://localhost:3000'}/api/compare-playbook`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ contractText: trimmed }),
+      });
+
+      if (playbookResponse.ok) {
+        playbookComparison = await playbookResponse.json();
+        console.log("Step 8: Playbook comparison completed ✓");
+      } else {
+        console.log("Step 8: Playbook comparison failed (non-critical)");
+      }
+    } catch (playbookError) {
+      console.log("Step 8: Playbook comparison error (non-critical):", playbookError.message);
+    }
+
+    const responseData = {
+      ...finalJson,
+      playbookComparison: playbookComparison
+    };
+
+    console.log("Step 9: Sending success response to client");
+    return res.status(200).json(responseData);
   } catch (err) {
     console.log("=== CRITICAL ERROR ===");
     console.log("Error type:", err.constructor.name);
