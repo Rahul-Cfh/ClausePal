@@ -78,7 +78,8 @@ You MUST return a JSON object with this EXACT structure (do NOT add any extra to
       "title": "string - Short name of the risk",
       "riskLevel": "High" | "Medium" | "Low",
       "likelihood": "High" | "Medium" | "Low" | "Unknown",
-      "potentialDamage": "string - Rough impact, e.g. 'Up to one month rent' or 'Full deposit at risk'",
+      "overallRisk": "Low" | "Medium" | "High" | "Critical",
+      "potentialDamage": "string - Quantified loss if possible (e.g., 'Up to ₹38,000', 'Full deposit ₹1,10,000 at risk'), otherwise qualitative description",
       "explanation": "string - 1-3 sentences explaining why this is a risk"
     }
   ],
@@ -105,30 +106,49 @@ Instructions:
    - questions: Important questions to ask before signing (array of strings)
    - note: A brief disclaimer (e.g., "This is an AI-generated analysis and not legal advice")
 
-2. Additionally compute:
+2. Additionally compute richer risk analysis:
    - riskOverview: A 2-3 sentence overall assessment of the main risks in this contract
+
    - quantifiedRisks: Provide 3-10 of the most important risk items. For each risk:
-     * title: Short descriptive name
-     * riskLevel: Assess as "High", "Medium", or "Low"
-     * likelihood: Assess as "High", "Medium", "Low", or "Unknown"
-     * potentialDamage: Describe the rough financial or other impact (e.g., "Up to ₹38,000", "Loss of security deposit", "Legal liability")
-     * explanation: 1-3 sentences explaining the risk clearly
+     * title: Short descriptive name for the risk
+     * riskLevel: Assess the SEVERITY of impact if it occurs as "High", "Medium", or "Low"
+     * likelihood: Assess how likely this risk is to occur as "High", "Medium", "Low", or "Unknown"
+     * overallRisk: Compute this using the risk matrix below based on riskLevel (severity) × likelihood:
+
+       RISK MATRIX:
+       Severity ↓ / Likelihood →     Low        Medium        High
+       ----------------------------------------------------------------
+       Low severity                  Low        Low           Medium
+       Medium severity               Low        Medium        High
+       High severity                 Medium     High          Critical
+
+       Examples:
+       - High severity + Low likelihood = Medium overallRisk
+       - Medium severity + High likelihood = High overallRisk
+       - Low severity + Medium likelihood = Low overallRisk
+       - High severity + High likelihood = Critical overallRisk
+       - Any severity + Unknown likelihood = use your best judgment (typically Medium)
+
+     * potentialDamage: Quantify the loss if possible (e.g., "Up to ₹38,000", "Full deposit ₹1,10,000 at risk", "Up to one month rent"). If exact amounts aren't in the contract, give a qualitative description (e.g., "Significant financial penalties", "Loss of property rights")
+     * explanation: 1-3 sentences explaining the risk in simple, practical terms
 
    - mitigationSteps: Provide 3-10 items describing what the user can do to reduce or manage those risks. For each:
-     * title: What this mitigation addresses
-     * steps: Array of concrete, practical actions the user can take
+     * title: Clear title of what this mitigation addresses
+     * steps: Array of 2-5 concrete, practical actions the user can take
 
-   - complianceProcesses: Provide 3-10 items describing ongoing processes to comply with important clauses. For each:
+   - complianceProcesses: Provide 3-10 items describing ongoing processes/checklists to stay compliant with important clauses. For each:
      * title: The clause or obligation being addressed
-     * process: Array of recurring or systematic actions (e.g., monthly reminders, documentation practices, checklists)
+     * process: Array of 2-5 recurring or systematic actions (e.g., monthly payment reminders, documentation practices, inspection checklists)
 
-3. Important:
-   - Always return VALID JSON that exactly matches the structure above
-   - Do NOT return markdown code blocks, backticks, or any text outside the JSON
-   - If you are unsure about an exact amount, describe potentialDamage qualitatively (e.g., "a few thousand rupees in repairs") but keep it inside the "potentialDamage" string
-   - All arrays should always be present, even if empty (e.g., [])
-   - Be clear, concise, and identify key points that a regular person needs to understand
-   - Use the contract type and country context to make your analysis more relevant
+3. Strict requirements:
+   - ALWAYS return valid JSON with the exact keys above
+   - NO markdown, no backticks, no commentary outside the JSON
+   - All arrays must always exist (even if empty, use [])
+   - All strings must not contain unescaped quotes
+   - Keep language simple and accessible for non-lawyers
+   - Do NOT provide legal advice; only explain meaning and potential risks
+   - Use the contract type and country context to make your analysis more relevant and specific
+   - When computing overallRisk, strictly follow the risk matrix provided above
 `;
 
     const userPrompt = `
