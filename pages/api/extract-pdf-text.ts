@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import formidable from 'formidable';
 import fs from 'fs';
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { PDFParse } from 'pdf-parse';
 
 export const config = {
   api: {
@@ -16,48 +16,20 @@ type ResponseData = {
   details?: string;
 };
 
-async function extractTextWithPdfJs(buffer: Buffer): Promise<string> {
+async function extractTextWithPdfParse(buffer: Buffer): Promise<string> {
   try {
-    const uint8Array = new Uint8Array(buffer);
+    console.log('[PDF Extraction] Starting pdf-parse extraction...');
 
-    const loadingTask = pdfjsLib.getDocument({
-      data: uint8Array,
-      useSystemFonts: true,
-      standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/',
-    });
+    const parser = new PDFParse({ data: buffer });
+    const textResult = await parser.getText();
+    const text = textResult.text;
 
-    const pdfDocument = await loadingTask.promise;
-    const numPages = pdfDocument.numPages;
+    console.log(`[PDF Extraction] Document loaded successfully. Pages: ${textResult.pages.length}`);
+    console.log(`[PDF Extraction] Text extracted: ${text.length} chars`);
 
-    console.log(`[PDF Extraction] Document loaded successfully. Pages: ${numPages}`);
-
-    let fullText = '';
-
-    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      try {
-        const page = await pdfDocument.getPage(pageNum);
-        const textContent = await page.getTextContent();
-
-        const pageText = textContent.items
-          .map((item: any) => {
-            if ('str' in item) {
-              return item.str;
-            }
-            return '';
-          })
-          .join(' ');
-
-        fullText += pageText + '\n';
-
-        console.log(`[PDF Extraction] Page ${pageNum}/${numPages} extracted: ${pageText.length} chars`);
-      } catch (pageError) {
-        console.error(`[PDF Extraction] Error on page ${pageNum}:`, pageError);
-      }
-    }
-
-    return fullText.trim();
+    return text.trim();
   } catch (error) {
-    console.error('[PDF Extraction] pdfjs-dist error:', error);
+    console.error('[PDF Extraction] pdf-parse error:', error);
     throw error;
   }
 }
@@ -109,7 +81,7 @@ export default async function handler(
     let extractedText = '';
 
     try {
-      extractedText = await extractTextWithPdfJs(dataBuffer);
+      extractedText = await extractTextWithPdfParse(dataBuffer);
       console.log(`[PDF Extraction] Text extracted: ${extractedText.length} chars`);
     } catch (extractError: any) {
       console.error('[PDF Extraction] Extraction failed:', extractError);

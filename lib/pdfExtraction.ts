@@ -9,6 +9,10 @@ export type PDFExtractionError = {
 };
 
 export async function extractTextFromPDFClient(file: File): Promise<string> {
+  if (typeof window === 'undefined') {
+    throw new Error('Client-side PDF extraction can only run in browser context');
+  }
+
   try {
     console.log('[Client PDF] Starting client-side extraction...');
 
@@ -88,19 +92,8 @@ export async function extractTextFromPDFServer(file: File): Promise<string> {
 }
 
 export async function extractTextFromPDFWithFallback(file: File): Promise<string> {
-  let clientError: Error | null = null;
   let serverError: PDFExtractionError | null = null;
-
-  try {
-    const text = await extractTextFromPDFClient(file);
-    if (text && text.trim().length > 0) {
-      console.log('[PDF] Client-side extraction successful');
-      return text;
-    }
-  } catch (error) {
-    console.warn('[PDF] Client-side extraction failed, trying server-side...', error);
-    clientError = error instanceof Error ? error : new Error(String(error));
-  }
+  let clientError: Error | null = null;
 
   try {
     const text = await extractTextFromPDFServer(file);
@@ -109,8 +102,27 @@ export async function extractTextFromPDFWithFallback(file: File): Promise<string
       return text;
     }
   } catch (error) {
-    console.error('[PDF] Server-side extraction also failed', error);
+    console.warn('[PDF] Server-side extraction failed, trying client-side...', error);
     serverError = error as PDFExtractionError;
+  }
+
+  if (typeof window === 'undefined') {
+    console.error('[PDF] Running in server context, cannot use client-side extraction');
+    if (serverError) {
+      throw new Error(serverError.message);
+    }
+    throw new Error('Failed to extract text from PDF');
+  }
+
+  try {
+    const text = await extractTextFromPDFClient(file);
+    if (text && text.trim().length > 0) {
+      console.log('[PDF] Client-side extraction successful');
+      return text;
+    }
+  } catch (error) {
+    console.error('[PDF] Client-side extraction also failed', error);
+    clientError = error instanceof Error ? error : new Error(String(error));
   }
 
   if (serverError) {
