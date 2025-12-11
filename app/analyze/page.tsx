@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, Download, Upload, FileText, X } from "lucide-react";
 import { QuickDecisionDashboard } from "@/components/QuickDecisionDashboard";
 import { ClauseAnalysis } from "@/components/ClauseAnalysis";
 
@@ -61,6 +61,84 @@ export default function AnalyzePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isProcessingPDF, setIsProcessingPDF] = useState(false);
+
+  const extractTextFromPDF = async (file: File): Promise<string> => {
+    const pdfjsLib = await import('pdfjs-dist');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let fullText = '';
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(' ');
+      fullText += pageText + '\n';
+    }
+
+    return fullText;
+  };
+
+  const handleFileUpload = async (file: File) => {
+    if (!file) return;
+
+    if (file.type !== 'application/pdf') {
+      setError('Please upload a PDF file');
+      return;
+    }
+
+    setUploadedFile(file);
+    setIsProcessingPDF(true);
+    setError(null);
+
+    try {
+      const extractedText = await extractTextFromPDF(file);
+      setContractText(extractedText);
+      setIsProcessingPDF(false);
+    } catch (err) {
+      console.error('Error extracting text from PDF:', err);
+      setError('Failed to extract text from PDF. Please try again.');
+      setIsProcessingPDF(false);
+      setUploadedFile(null);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
+
+  const removeFile = () => {
+    setUploadedFile(null);
+    setContractText('');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +146,7 @@ export default function AnalyzePage() {
     setResult(null);
 
     if (!contractText.trim()) {
-      setError("Please paste a contract to analyze.");
+      setError("Please upload a contract PDF to analyze.");
       return;
     }
 
@@ -251,7 +329,7 @@ legal advice. For important decisions, please speak to a qualified lawyer.
 
         <h1 className="text-3xl font-semibold mb-2">Analyze your contract</h1>
         <p className="text-slate-300 mb-6">
-          Paste your contract below and we&apos;ll break it down into simple,
+          Upload your contract PDF and we&apos;ll break it down into simple,
           human language. This is not legal advice.
         </p>
 
@@ -285,25 +363,77 @@ legal advice. For important decisions, please speak to a qualified lawyer.
           </div>
 
           <div>
-            <label className="block text-sm mb-1">
-              Paste your contract text here
+            <label className="block text-sm mb-2">
+              Upload your contract PDF
             </label>
-            <textarea
-              value={contractText}
-              onChange={(e) => setContractText(e.target.value)}
-              rows={16}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-mono"
-              placeholder="Paste the full contract text..."
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              For this MVP, we only support text. Remove any images or signatures.
+
+            {!uploadedFile ? (
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+                  isDragging
+                    ? 'border-emerald-500 bg-emerald-950/20'
+                    : 'border-slate-700 bg-slate-900/60 hover:border-slate-600'
+                }`}
+              >
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handleFileChange}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <Upload className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                <p className="text-sm text-slate-300 mb-1">
+                  Drag and drop your PDF here, or click to browse
+                </p>
+                <p className="text-xs text-slate-500">
+                  Supported format: PDF (max 10MB)
+                </p>
+              </div>
+            ) : (
+              <div className="border border-slate-700 bg-slate-900/60 rounded-lg p-4">
+                {isProcessingPDF ? (
+                  <div className="flex items-center gap-3">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+                    <div>
+                      <p className="text-sm font-medium">Processing PDF...</p>
+                      <p className="text-xs text-slate-400">Extracting text from your document</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <FileText className="w-8 h-8 text-emerald-500" />
+                      <div>
+                        <p className="text-sm font-medium">{uploadedFile.name}</p>
+                        <p className="text-xs text-slate-400">
+                          {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={removeFile}
+                      className="p-1 hover:bg-slate-800 rounded transition-colors"
+                    >
+                      <X className="w-5 h-5 text-slate-400" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <p className="mt-2 text-xs text-slate-500">
+              We extract text from your PDF automatically. Images and complex formatting may not be preserved.
             </p>
           </div>
 
           <button
             type="submit"
-            disabled={loading}
-            className="inline-flex items-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-900 disabled:opacity-60"
+            disabled={loading || isProcessingPDF || !contractText.trim()}
+            className="inline-flex items-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-900 disabled:opacity-60 disabled:cursor-not-allowed hover:bg-emerald-400 transition-colors"
           >
             {loading ? "Analyzing..." : "Explain this contract"}
           </button>

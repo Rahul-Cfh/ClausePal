@@ -32,7 +32,7 @@ export default function Home() {
             The AI Copilot for Everyone Who Isn't a Lawyer
           </h1>
           <p className="text-xl md:text-2xl text-slate-400 mb-12 leading-relaxed">
-            Paste. Analyze. Understand. No legal jargon. Powered by AI.
+            Upload. Analyze. Understand. No legal jargon. Powered by AI.
           </p>
           <Link
             href="/analyze"
@@ -51,9 +51,9 @@ export default function Home() {
                 <ClipboardList className="w-6 h-6 text-emerald-500" />
               </div>
               <div>
-                <h3 className="text-xl font-semibold mb-2">Step 1: Paste your contract</h3>
+                <h3 className="text-xl font-semibold mb-2">Step 1: Upload your contract PDF</h3>
                 <p className="text-slate-400">
-                  Copy and paste any contract or legal document into our analyzer.
+                  Simply drag and drop or select any PDF contract for instant analysis.
                 </p>
               </div>
             </div>
