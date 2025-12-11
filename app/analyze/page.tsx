@@ -276,6 +276,10 @@ legal advice. For important decisions, please speak to a qualified lawyer.
             )}
 
             {result.quantifiedRisks && result.quantifiedRisks.length > 0 && (
+              <RiskMatrix />
+            )}
+
+            {result.quantifiedRisks && result.quantifiedRisks.length > 0 && (
               <SectionCard title="Quantified risks">
                 <div className="space-y-4">
                   {result.quantifiedRisks.map((risk, idx) => (
@@ -386,5 +390,45 @@ function BulletList({ items }: { items: string[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function RiskMatrix() {
+  return (
+    <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-4">
+      <h3 className="text-sm font-semibold mb-3">Risk Assessment Matrix</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="bg-slate-900">
+              <th className="border border-slate-700 p-2 text-left">Severity ↓ / Likelihood →</th>
+              <th className="border border-slate-700 p-2">Low</th>
+              <th className="border border-slate-700 p-2">Medium</th>
+              <th className="border border-slate-700 p-2">High</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border border-slate-700 p-2 font-medium">Low</td>
+              <td className="border border-slate-700 p-2 text-center bg-green-950/40 text-green-300">Low</td>
+              <td className="border border-slate-700 p-2 text-center bg-green-950/40 text-green-300">Low</td>
+              <td className="border border-slate-700 p-2 text-center bg-yellow-950/40 text-yellow-300">Medium</td>
+            </tr>
+            <tr>
+              <td className="border border-slate-700 p-2 font-medium">Medium</td>
+              <td className="border border-slate-700 p-2 text-center bg-green-950/40 text-green-300">Low</td>
+              <td className="border border-slate-700 p-2 text-center bg-yellow-950/40 text-yellow-300">Medium</td>
+              <td className="border border-slate-700 p-2 text-center bg-orange-950/40 text-orange-300">High</td>
+            </tr>
+            <tr>
+              <td className="border border-slate-700 p-2 font-medium">High</td>
+              <td className="border border-slate-700 p-2 text-center bg-yellow-950/40 text-yellow-300">Medium</td>
+              <td className="border border-slate-700 p-2 text-center bg-orange-950/40 text-orange-300">High</td>
+              <td className="border border-slate-700 p-2 text-center bg-red-950/40 text-red-300">Critical</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
