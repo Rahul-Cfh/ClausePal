@@ -5,11 +5,12 @@ import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, AlertCircle, AlertTriangle, XCircle } from 'lucide-react';
 
 interface OverallScore {
-  favorable: number;
-  acceptable: number;
-  needs_review: number;
-  red_flag: number;
-  total: number;
+  averageFavourability: number;
+  totalClauses: number;
+  lowRisk: number;
+  mediumRisk: number;
+  highRisk: number;
+  criticalRisk: number;
 }
 
 interface QuickDecisionDashboardProps {
@@ -18,47 +19,33 @@ interface QuickDecisionDashboardProps {
 }
 
 export function QuickDecisionDashboard({ overallScore, summary }: QuickDecisionDashboardProps) {
-  const getHealthScore = () => {
-    if (overallScore.total === 0) return 0;
-
-    const favorableWeight = overallScore.favorable * 4;
-    const acceptableWeight = overallScore.acceptable * 3;
-    const needsReviewWeight = overallScore.needs_review * 1.5;
-    const redFlagWeight = overallScore.red_flag * 0;
-
-    const totalWeight = favorableWeight + acceptableWeight + needsReviewWeight + redFlagWeight;
-    const maxWeight = overallScore.total * 4;
-
-    return Math.round((totalWeight / maxWeight) * 100);
-  };
-
-  const healthScore = getHealthScore();
+  const healthScore = Math.round(overallScore.averageFavourability * 10);
 
   const getHealthColor = (score: number) => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 60) return 'text-blue-600';
-    if (score >= 40) return 'text-yellow-600';
+    if (score >= 70) return 'text-green-600';
+    if (score >= 50) return 'text-blue-600';
+    if (score >= 30) return 'text-yellow-600';
     return 'text-red-600';
   };
 
   const getHealthBgColor = (score: number) => {
-    if (score >= 80) return 'bg-green-50 border-green-200';
-    if (score >= 60) return 'bg-blue-50 border-blue-200';
-    if (score >= 40) return 'bg-yellow-50 border-yellow-200';
+    if (score >= 70) return 'bg-green-50 border-green-200';
+    if (score >= 50) return 'bg-blue-50 border-blue-200';
+    if (score >= 30) return 'bg-yellow-50 border-yellow-200';
     return 'bg-red-50 border-red-200';
   };
 
   const getHealthLabel = (score: number) => {
-    if (score >= 80) return 'Strong Position';
-    if (score >= 60) return 'Generally Favorable';
-    if (score >= 40) return 'Review Recommended';
+    if (score >= 70) return 'Strong Position';
+    if (score >= 50) return 'Generally Favorable';
+    if (score >= 30) return 'Review Recommended';
     return 'Significant Concerns';
   };
 
-  const favorablePercent = overallScore.total > 0 ? Math.round((overallScore.favorable / overallScore.total) * 100) : 0;
-  const acceptablePercent = overallScore.total > 0 ? Math.round((overallScore.acceptable / overallScore.total) * 100) : 0;
-  const needsReviewPercent = overallScore.total > 0 ? Math.round((overallScore.needs_review / overallScore.total) * 100) : 0;
-  const redFlagPercent = overallScore.total > 0 ? Math.round((overallScore.red_flag / overallScore.total) * 100) : 0;
+  const lowRiskPercent = overallScore.totalClauses > 0 ? Math.round((overallScore.lowRisk / overallScore.totalClauses) * 100) : 0;
+  const mediumRiskPercent = overallScore.totalClauses > 0 ? Math.round((overallScore.mediumRisk / overallScore.totalClauses) * 100) : 0;
+  const highRiskPercent = overallScore.totalClauses > 0 ? Math.round((overallScore.highRisk / overallScore.totalClauses) * 100) : 0;
+  const criticalRiskPercent = overallScore.totalClauses > 0 ? Math.round((overallScore.criticalRisk / overallScore.totalClauses) * 100) : 0;
 
   return (
     <Card className={`border-2 ${getHealthBgColor(healthScore)}`}>
@@ -81,7 +68,8 @@ export function QuickDecisionDashboard({ overallScore, summary }: QuickDecisionD
           </div>
           <div className="text-right">
             <div className="text-sm font-medium text-gray-600 mb-2">Clauses Analyzed</div>
-            <div className="text-3xl font-bold text-gray-900">{overallScore.total}</div>
+            <div className="text-3xl font-bold text-gray-900">{overallScore.totalClauses}</div>
+            <div className="text-xs text-gray-500 mt-1">Avg Score: {overallScore.averageFavourability.toFixed(1)}/10</div>
           </div>
         </div>
 
@@ -89,12 +77,12 @@ export function QuickDecisionDashboard({ overallScore, summary }: QuickDecisionD
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-green-600" />
-              <span className="font-medium">Favorable</span>
+              <span className="font-medium">Low Risk</span>
             </div>
             <div className="flex items-center gap-3">
-              <div className="text-sm text-gray-600">{favorablePercent}%</div>
+              <div className="text-sm text-gray-600">{lowRiskPercent}%</div>
               <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
-                {overallScore.favorable}
+                {overallScore.lowRisk}
               </Badge>
             </div>
           </div>
@@ -102,12 +90,12 @@ export function QuickDecisionDashboard({ overallScore, summary }: QuickDecisionD
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-blue-600" />
-              <span className="font-medium">Acceptable</span>
+              <span className="font-medium">Medium Risk</span>
             </div>
             <div className="flex items-center gap-3">
-              <div className="text-sm text-gray-600">{acceptablePercent}%</div>
+              <div className="text-sm text-gray-600">{mediumRiskPercent}%</div>
               <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
-                {overallScore.acceptable}
+                {overallScore.mediumRisk}
               </Badge>
             </div>
           </div>
@@ -115,12 +103,12 @@ export function QuickDecisionDashboard({ overallScore, summary }: QuickDecisionD
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-yellow-600" />
-              <span className="font-medium">Needs Review</span>
+              <span className="font-medium">High Risk</span>
             </div>
             <div className="flex items-center gap-3">
-              <div className="text-sm text-gray-600">{needsReviewPercent}%</div>
+              <div className="text-sm text-gray-600">{highRiskPercent}%</div>
               <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
-                {overallScore.needs_review}
+                {overallScore.highRisk}
               </Badge>
             </div>
           </div>
@@ -128,12 +116,12 @@ export function QuickDecisionDashboard({ overallScore, summary }: QuickDecisionD
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <XCircle className="w-5 h-5 text-red-600" />
-              <span className="font-medium">Red Flags</span>
+              <span className="font-medium">Critical</span>
             </div>
             <div className="flex items-center gap-3">
-              <div className="text-sm text-gray-600">{redFlagPercent}%</div>
+              <div className="text-sm text-gray-600">{criticalRiskPercent}%</div>
               <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">
-                {overallScore.red_flag}
+                {overallScore.criticalRisk}
               </Badge>
             </div>
           </div>
@@ -144,14 +132,14 @@ export function QuickDecisionDashboard({ overallScore, summary }: QuickDecisionD
           <p className="text-sm text-gray-700 leading-relaxed">{summary}</p>
         </div>
 
-        {overallScore.red_flag > 0 && (
+        {overallScore.criticalRisk > 0 && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
             <div className="flex items-start gap-2">
               <XCircle className="w-5 h-5 text-red-600 mt-0.5" />
               <div>
                 <h4 className="font-semibold text-red-900 text-sm mb-1">Action Required</h4>
                 <p className="text-sm text-red-800">
-                  This contract has {overallScore.red_flag} red flag{overallScore.red_flag !== 1 ? 's' : ''} that require immediate attention.
+                  This contract has {overallScore.criticalRisk} critical risk{overallScore.criticalRisk !== 1 ? 's' : ''} that require immediate attention.
                   Review the clause-by-clause analysis below before proceeding.
                 </p>
               </div>

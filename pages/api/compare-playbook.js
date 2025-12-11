@@ -54,7 +54,7 @@ export default async function handler(req, res) {
       standardResponse: clause.standard_response
     }));
 
-    const prompt = `You are a legal contract analyst. Analyze the following contract against our standard NDA playbook clauses.
+    const prompt = `You are a legal contract analyst. Analyze the following contract against our standard legal playbook clauses.
 
 CONTRACT TEXT:
 ${contractText}
@@ -65,45 +65,57 @@ ${JSON.stringify(playbookContext, null, 2)}
 INSTRUCTIONS:
 1. Read the ENTIRE contract text thoroughly from beginning to end
 2. For EACH playbook clause, carefully search the contract to determine if a similar or related clause is present
-3. For each identified clause found in the contract, determine the favorability level:
-   - "favorable": Language is in our favor or meets standard expectations
-   - "acceptable": Minor deviations from standard but within acceptable limits
-   - "needs_review": Significant deviations requiring careful consideration
-   - "red_flag": Unacceptable positions or high-risk language
+3. For each identified clause found in the contract, provide comprehensive analysis
 
-4. For each identified clause, provide:
-   - clause_title: The title from the playbook
-   - found_text: The actual text from the contract (quote verbatim or summarize if too long)
-   - favorability: One of the four levels above
-   - explanation: Why you assigned this favorability level and how the contract language compares to the playbook standard
-   - deviation: How the contract language differs from standard (if applicable)
-   - recommendation: What specific action should be taken
+4. For each clause, you MUST provide ALL of the following fields:
+   - clauseText: The actual verbatim text from the contract (quote directly, max 500 chars)
+   - matchedPlaybookClause: The title of the playbook clause this matches
+   - summary: A concise 1-2 sentence plain English summary of what this clause means
+   - issues: Array of specific issues or problems found in this clause (concrete, actionable items)
+   - unacceptablePositions: Array of any unacceptable positions found (if none, use empty array)
+   - questions: Array of 2-4 specific questions to ask the counterparty about this clause
+   - mitigation: Array of 2-4 concrete suggestions to reduce risk or improve the clause
+   - recommendedEdit: Provide alternative language that would be more favorable (specific text suggestion)
+   - deviation: Assess deviation level from playbook standard as one of: "low", "medium", "high", or "unacceptable"
+   - favourabilityScore: Rate from 1-10 where:
+     * 10 = fully aligned with playbook, highly favorable
+     * 7-9 = minor acceptable deviations, still favorable
+     * 4-6 = moderate deviations requiring review
+     * 1-3 = major deviations, unfavorable
+     * 0 = contains unacceptable position
+   - risk: Overall risk rating as one of: "low", "medium", "high", or "critical" (use "critical" if unacceptable)
 
-5. IMPORTANT: Be thorough in your search. Check for variations, paraphrases, and related language. A clause might be present even if worded differently than the playbook example.
+5. Be thorough. Check for variations, paraphrases, and related language.
+
+6. IMPORTANT: Only include clauses that are actually present in the contract.
 
 Return ONLY a valid JSON object with this structure:
 {
   "clauseAnalysis": [
     {
-      "clause_title": "string",
-      "found_text": "string",
-      "favorability": "favorable" | "acceptable" | "needs_review" | "red_flag",
-      "explanation": "string",
-      "deviation": "string or null",
-      "recommendation": "string"
+      "clauseText": "string",
+      "matchedPlaybookClause": "string",
+      "summary": "string",
+      "issues": ["string", ...],
+      "unacceptablePositions": ["string", ...],
+      "questions": ["string", ...],
+      "mitigation": ["string", ...],
+      "recommendedEdit": "string",
+      "deviation": "low" | "medium" | "high" | "unacceptable",
+      "favourabilityScore": number (0-10),
+      "risk": "low" | "medium" | "high" | "critical"
     }
   ],
   "overallScore": {
-    "favorable": number,
-    "acceptable": number,
-    "needs_review": number,
-    "red_flag": number,
-    "total": number
+    "averageFavourability": number,
+    "totalClauses": number,
+    "lowRisk": number,
+    "mediumRisk": number,
+    "highRisk": number,
+    "criticalRisk": number
   },
-  "summary": "A brief 2-3 sentence summary of the overall contract favorability"
-}
-
-Only include clauses that are actually present in the contract. Do not include clauses that are missing from the contract.`;
+  "summary": "A brief 2-3 sentence summary of the overall contract favorability and key concerns"
+}`;
 
     console.log('Calling OpenAI for playbook comparison...');
     const { text } = await generateText({

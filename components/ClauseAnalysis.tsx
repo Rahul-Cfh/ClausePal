@@ -8,12 +8,17 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { CheckCircle2, AlertCircle, AlertTriangle, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ClauseAnalysisItem {
-  clause_title: string;
-  found_text: string;
-  favorability: 'favorable' | 'acceptable' | 'needs_review' | 'red_flag';
-  explanation: string;
-  deviation: string | null;
-  recommendation: string;
+  clauseText: string;
+  matchedPlaybookClause: string;
+  summary: string;
+  issues: string[];
+  unacceptablePositions: string[];
+  questions: string[];
+  mitigation: string[];
+  recommendedEdit: string;
+  deviation: 'low' | 'medium' | 'high' | 'unacceptable';
+  favourabilityScore: number;
+  risk: 'low' | 'medium' | 'high' | 'critical';
 }
 
 interface ClauseAnalysisProps {
@@ -34,45 +39,46 @@ export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
     setExpandedClauses(newExpanded);
   };
 
-  const getFavorabilityIcon = (favorability: string) => {
-    switch (favorability) {
-      case 'favorable':
+  const getRiskIcon = (risk: string) => {
+    switch (risk) {
+      case 'low':
         return <CheckCircle2 className="w-5 h-5 text-green-600" />;
-      case 'acceptable':
+      case 'medium':
         return <AlertCircle className="w-5 h-5 text-blue-600" />;
-      case 'needs_review':
+      case 'high':
         return <AlertTriangle className="w-5 h-5 text-yellow-600" />;
-      case 'red_flag':
+      case 'critical':
         return <XCircle className="w-5 h-5 text-red-600" />;
       default:
         return null;
     }
   };
 
-  const getFavorabilityBadge = (favorability: string) => {
-    switch (favorability) {
-      case 'favorable':
-        return <Badge className="bg-green-100 text-green-800 border-green-300">Favorable</Badge>;
-      case 'acceptable':
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-300">Acceptable</Badge>;
-      case 'needs_review':
-        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">Needs Review</Badge>;
-      case 'red_flag':
-        return <Badge className="bg-red-100 text-red-800 border-red-300">Red Flag</Badge>;
+  const getRiskBadge = (risk: string, score: number) => {
+    const scoreDisplay = `${score}/10`;
+    switch (risk) {
+      case 'low':
+        return <Badge className="bg-green-100 text-green-800 border-green-300">Low Risk • {scoreDisplay}</Badge>;
+      case 'medium':
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-300">Medium Risk • {scoreDisplay}</Badge>;
+      case 'high':
+        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">High Risk • {scoreDisplay}</Badge>;
+      case 'critical':
+        return <Badge className="bg-red-100 text-red-800 border-red-300">Critical • {scoreDisplay}</Badge>;
       default:
         return null;
     }
   };
 
-  const getCardBorderColor = (favorability: string) => {
-    switch (favorability) {
-      case 'favorable':
+  const getCardBorderColor = (risk: string) => {
+    switch (risk) {
+      case 'low':
         return 'border-l-4 border-l-green-500';
-      case 'acceptable':
+      case 'medium':
         return 'border-l-4 border-l-blue-500';
-      case 'needs_review':
+      case 'high':
         return 'border-l-4 border-l-yellow-500';
-      case 'red_flag':
+      case 'critical':
         return 'border-l-4 border-l-red-500';
       default:
         return '';
@@ -81,7 +87,7 @@ export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
 
   const filteredClauses = clauses.filter(clause => {
     if (filter === 'all') return true;
-    return clause.favorability === filter;
+    return clause.risk === filter;
   });
 
   return (
@@ -100,40 +106,40 @@ export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
             All ({clauses.length})
           </Button>
           <Button
-            variant={filter === 'favorable' ? 'default' : 'outline'}
+            variant={filter === 'low' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setFilter('favorable')}
+            onClick={() => setFilter('low')}
             className="gap-1"
           >
             <CheckCircle2 className="w-4 h-4" />
-            Favorable ({clauses.filter(c => c.favorability === 'favorable').length})
+            Low Risk ({clauses.filter(c => c.risk === 'low').length})
           </Button>
           <Button
-            variant={filter === 'acceptable' ? 'default' : 'outline'}
+            variant={filter === 'medium' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setFilter('acceptable')}
+            onClick={() => setFilter('medium')}
             className="gap-1"
           >
             <AlertCircle className="w-4 h-4" />
-            Acceptable ({clauses.filter(c => c.favorability === 'acceptable').length})
+            Medium Risk ({clauses.filter(c => c.risk === 'medium').length})
           </Button>
           <Button
-            variant={filter === 'needs_review' ? 'default' : 'outline'}
+            variant={filter === 'high' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setFilter('needs_review')}
+            onClick={() => setFilter('high')}
             className="gap-1"
           >
             <AlertTriangle className="w-4 h-4" />
-            Needs Review ({clauses.filter(c => c.favorability === 'needs_review').length})
+            High Risk ({clauses.filter(c => c.risk === 'high').length})
           </Button>
           <Button
-            variant={filter === 'red_flag' ? 'default' : 'outline'}
+            variant={filter === 'critical' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setFilter('red_flag')}
+            onClick={() => setFilter('critical')}
             className="gap-1"
           >
             <XCircle className="w-4 h-4" />
-            Red Flags ({clauses.filter(c => c.favorability === 'red_flag').length})
+            Critical ({clauses.filter(c => c.risk === 'critical').length})
           </Button>
         </div>
       </CardHeader>
@@ -144,35 +150,75 @@ export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
           </div>
         ) : (
           filteredClauses.map((clause, index) => (
-            <Card key={index} className={`${getCardBorderColor(clause.favorability)}`}>
+            <Card key={index} className={`${getCardBorderColor(clause.risk)}`}>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3 flex-1">
-                    {getFavorabilityIcon(clause.favorability)}
+                    {getRiskIcon(clause.risk)}
                     <div className="flex-1">
-                      <CardTitle className="text-lg">{clause.clause_title}</CardTitle>
+                      <CardTitle className="text-lg">{clause.matchedPlaybookClause}</CardTitle>
+                      <p className="text-xs text-gray-500 mt-1">Deviation: {clause.deviation.toUpperCase()}</p>
                     </div>
                   </div>
-                  {getFavorabilityBadge(clause.favorability)}
+                  {getRiskBadge(clause.risk, clause.favourabilityScore)}
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <h4 className="font-semibold text-sm mb-2">Analysis</h4>
-                  <p className="text-sm text-gray-700 leading-relaxed">{clause.explanation}</p>
+                  <h4 className="font-semibold text-sm mb-2">Summary</h4>
+                  <p className="text-sm text-gray-700 leading-relaxed">{clause.summary}</p>
                 </div>
 
-                {clause.deviation && (
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                    <h4 className="font-semibold text-sm mb-1 text-amber-900">Deviation from Standard</h4>
-                    <p className="text-sm text-amber-800">{clause.deviation}</p>
+                {clause.issues && clause.issues.length > 0 && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <h4 className="font-semibold text-sm mb-2 text-red-900">Issues Found</h4>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {clause.issues.map((issue, idx) => (
+                        <li key={idx} className="text-sm text-red-800">{issue}</li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <h4 className="font-semibold text-sm mb-1 text-blue-900">Recommendation</h4>
-                  <p className="text-sm text-blue-800">{clause.recommendation}</p>
-                </div>
+                {clause.unacceptablePositions && clause.unacceptablePositions.length > 0 && (
+                  <div className="p-3 bg-red-100 border-2 border-red-400 rounded-lg">
+                    <h4 className="font-semibold text-sm mb-2 text-red-900">⚠ Unacceptable Positions</h4>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {clause.unacceptablePositions.map((pos, idx) => (
+                        <li key={idx} className="text-sm text-red-900 font-medium">{pos}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {clause.questions && clause.questions.length > 0 && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="font-semibold text-sm mb-2 text-blue-900">Questions for Counterparty</h4>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {clause.questions.map((question, idx) => (
+                        <li key={idx} className="text-sm text-blue-800">{question}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {clause.mitigation && clause.mitigation.length > 0 && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <h4 className="font-semibold text-sm mb-2 text-green-900">Mitigation Suggestions</h4>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {clause.mitigation.map((mit, idx) => (
+                        <li key={idx} className="text-sm text-green-800">{mit}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {clause.recommendedEdit && (
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                    <h4 className="font-semibold text-sm mb-2 text-purple-900">Recommended Alternative Language</h4>
+                    <p className="text-sm text-purple-800 italic leading-relaxed">{clause.recommendedEdit}</p>
+                  </div>
+                )}
 
                 <Collapsible open={expandedClauses.has(index)}>
                   <CollapsibleTrigger asChild>
@@ -193,7 +239,7 @@ export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
                   <CollapsibleContent className="pt-2">
                     <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
                       <h4 className="font-semibold text-xs mb-2 text-gray-700">Contract Language</h4>
-                      <p className="text-xs text-gray-600 leading-relaxed italic">{clause.found_text}</p>
+                      <p className="text-xs text-gray-600 leading-relaxed italic">{clause.clauseText}</p>
                     </div>
                   </CollapsibleContent>
                 </Collapsible>

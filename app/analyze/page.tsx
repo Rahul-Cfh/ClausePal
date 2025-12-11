@@ -8,22 +8,28 @@ import { QuickDecisionDashboard } from "@/components/QuickDecisionDashboard";
 import { ClauseAnalysis } from "@/components/ClauseAnalysis";
 
 type ClauseAnalysisItem = {
-  clause_title: string;
-  found_text: string;
-  favorability: 'favorable' | 'acceptable' | 'needs_review' | 'red_flag';
-  explanation: string;
-  deviation: string | null;
-  recommendation: string;
+  clauseText: string;
+  matchedPlaybookClause: string;
+  summary: string;
+  issues: string[];
+  unacceptablePositions: string[];
+  questions: string[];
+  mitigation: string[];
+  recommendedEdit: string;
+  deviation: 'low' | 'medium' | 'high' | 'unacceptable';
+  favourabilityScore: number;
+  risk: 'low' | 'medium' | 'high' | 'critical';
 };
 
 type PlaybookComparison = {
   clauseAnalysis: ClauseAnalysisItem[];
   overallScore: {
-    favorable: number;
-    acceptable: number;
-    needs_review: number;
-    red_flag: number;
-    total: number;
+    averageFavourability: number;
+    totalClauses: number;
+    lowRisk: number;
+    mediumRisk: number;
+    highRisk: number;
+    criticalRisk: number;
   };
   summary: string;
 };
@@ -113,6 +119,9 @@ export default function AnalyzePage() {
       console.log(`[Upload] Successfully extracted ${extractedText.length} characters`);
       setContractText(extractedText);
       setIsProcessingPDF(false);
+
+      console.log('[Upload] Starting automatic analysis...');
+      await performAnalysis(extractedText);
     } catch (err) {
       console.error('[Upload] Error extracting text from PDF:', err);
 
@@ -169,13 +178,12 @@ export default function AnalyzePage() {
     setContractText('');
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const performAnalysis = async (textToAnalyze: string) => {
     setError(null);
     setResult(null);
 
-    if (!contractText.trim()) {
-      setError("Please upload a contract PDF to analyze.");
+    if (!textToAnalyze.trim()) {
+      setError("No contract text available to analyze.");
       return;
     }
 
@@ -186,7 +194,7 @@ export default function AnalyzePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contractText,
+          contractText: textToAnalyze,
           contractType,
           country,
         }),
@@ -220,6 +228,11 @@ export default function AnalyzePage() {
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await performAnalysis(contractText);
+  };
+
   const downloadResults = () => {
     if (!result) return;
 
@@ -232,23 +245,22 @@ export default function AnalyzePage() {
     };
 
     let playbookSection = '';
-    if (result.playbookComparison && result.playbookComparison.overallScore.total > 0) {
+    if (result.playbookComparison && result.playbookComparison.overallScore.totalClauses > 0) {
       const pb = result.playbookComparison;
+      const healthScore = Math.round(pb.overallScore.averageFavourability * 10);
       playbookSection = `
 ================================================================================
 
 QUICK DECISION DASHBOARD
 
-Contract Health Score: ${Math.round(
-        ((pb.overallScore.favorable * 4 + pb.overallScore.acceptable * 3 +
-          pb.overallScore.needs_review * 1.5) / (pb.overallScore.total * 4)) * 100
-      )}%
+Contract Health Score: ${healthScore}%
+Average Favourability: ${pb.overallScore.averageFavourability.toFixed(1)}/10
 
-Clauses Analyzed: ${pb.overallScore.total}
-  - Favorable: ${pb.overallScore.favorable}
-  - Acceptable: ${pb.overallScore.acceptable}
-  - Needs Review: ${pb.overallScore.needs_review}
-  - Red Flags: ${pb.overallScore.red_flag}
+Clauses Analyzed: ${pb.overallScore.totalClauses}
+  - Low Risk: ${pb.overallScore.lowRisk}
+  - Medium Risk: ${pb.overallScore.mediumRisk}
+  - High Risk: ${pb.overallScore.highRisk}
+  - Critical: ${pb.overallScore.criticalRisk}
 
 Summary: ${pb.summary}
 
@@ -257,18 +269,27 @@ Summary: ${pb.summary}
 CLAUSE-BY-CLAUSE ANALYSIS
 
 ${pb.clauseAnalysis.map((clause, idx) => `
-${idx + 1}. ${clause.clause_title}
-   Favorability: ${clause.favorability.toUpperCase().replace('_', ' ')}
+${idx + 1}. ${clause.matchedPlaybookClause}
+   Risk Level: ${clause.risk.toUpperCase()}
+   Favourability Score: ${clause.favourabilityScore}/10
+   Deviation: ${clause.deviation.toUpperCase()}
 
-   Analysis:
-   ${clause.explanation}
+   Summary:
+   ${clause.summary}
 
-   ${clause.deviation ? `Deviation from Standard:\n   ${clause.deviation}\n   ` : ''}
-   Recommendation:
-   ${clause.recommendation}
+   ${clause.issues.length > 0 ? `Issues Found:\n${clause.issues.map(i => `   - ${i}`).join('\n')}\n\n` : ''}
+   ${clause.unacceptablePositions.length > 0 ? `⚠ UNACCEPTABLE POSITIONS:\n${clause.unacceptablePositions.map(p => `   - ${p}`).join('\n')}\n\n` : ''}
+   Questions for Counterparty:
+${clause.questions.map(q => `   - ${q}`).join('\n')}
+
+   Mitigation Suggestions:
+${clause.mitigation.map(m => `   - ${m}`).join('\n')}
+
+   Recommended Alternative Language:
+   "${clause.recommendedEdit}"
 
    Contract Text:
-   "${clause.found_text}"
+   "${clause.clauseText}"
 `).join('\n')}
 
 ================================================================================
@@ -493,7 +514,7 @@ legal advice. For important decisions, please speak to a qualified lawyer.
 
         {result && (
           <div className="mt-8 space-y-6">
-            {result.playbookComparison && result.playbookComparison.overallScore.total > 0 && (
+            {result.playbookComparison && result.playbookComparison.overallScore.totalClauses > 0 && (
               <>
                 <QuickDecisionDashboard
                   overallScore={result.playbookComparison.overallScore}
