@@ -362,15 +362,93 @@ Return ONLY a valid JSON object with this structure:
         }
         cleanedPlaybookText = cleanedPlaybookText.trim();
 
+        console.log("Cleaned playbook text (first 500 chars):", cleanedPlaybookText.slice(0, 500));
+        console.log("Cleaned playbook text (last 200 chars):", cleanedPlaybookText.slice(-200));
+
         playbookComparison = JSON.parse(cleanedPlaybookText);
+
         console.log("Step 8: Playbook comparison completed ✓");
+        console.log("Playbook comparison structure:", {
+          hasClauseAnalysis: !!playbookComparison.clauseAnalysis,
+          clauseAnalysisIsArray: Array.isArray(playbookComparison.clauseAnalysis),
+          clauseAnalysisLength: playbookComparison.clauseAnalysis?.length || 0,
+          hasOverallScore: !!playbookComparison.overallScore,
+          totalClauses: playbookComparison.overallScore?.totalClauses || 0,
+          hasSummary: !!playbookComparison.summary
+        });
+
+        if (playbookComparison.clauseAnalysis && playbookComparison.clauseAnalysis.length > 0) {
+          console.log("First clause sample:", {
+            clauseNumber: playbookComparison.clauseAnalysis[0].clauseNumber,
+            clauseTitle: playbookComparison.clauseAnalysis[0].clauseTitle,
+            hasAllRequiredFields: !!(
+              playbookComparison.clauseAnalysis[0].clauseNumber &&
+              playbookComparison.clauseAnalysis[0].clauseTitle &&
+              playbookComparison.clauseAnalysis[0].favourabilityScore !== undefined
+            )
+          });
+        }
+
         console.log("Total clauses extracted:", playbookComparison.overallScore?.totalClauses || 0);
+
+        if (playbookComparison && playbookComparison.clauseAnalysis && Array.isArray(playbookComparison.clauseAnalysis)) {
+          const actualClauseCount = playbookComparison.clauseAnalysis.length;
+
+          if (!playbookComparison.overallScore) {
+            console.log("WARNING: overallScore missing, creating default structure");
+            playbookComparison.overallScore = {};
+          }
+
+          if (!playbookComparison.overallScore.totalClauses || playbookComparison.overallScore.totalClauses === 0) {
+            console.log(`WARNING: totalClauses is ${playbookComparison.overallScore.totalClauses}, but clauseAnalysis has ${actualClauseCount} items. Correcting...`);
+            playbookComparison.overallScore.totalClauses = actualClauseCount;
+          }
+
+          if (playbookComparison.overallScore.totalClauses !== actualClauseCount) {
+            console.log(`WARNING: Mismatch detected. totalClauses=${playbookComparison.overallScore.totalClauses} but clauseAnalysis.length=${actualClauseCount}. Using actual count.`);
+            playbookComparison.overallScore.totalClauses = actualClauseCount;
+          }
+
+          const riskCounts = { low: 0, medium: 0, high: 0, critical: 0 };
+          let totalFavourability = 0;
+          let playbookMatched = 0;
+          let noPlaybookMatch = 0;
+
+          playbookComparison.clauseAnalysis.forEach(clause => {
+            const risk = (clause.risk || 'medium').toLowerCase();
+            if (risk === 'low') riskCounts.low++;
+            else if (risk === 'medium') riskCounts.medium++;
+            else if (risk === 'high') riskCounts.high++;
+            else if (risk === 'critical') riskCounts.critical++;
+
+            totalFavourability += (clause.favourabilityScore || 5);
+
+            if (clause.playbookMatchFound) playbookMatched++;
+            else noPlaybookMatch++;
+          });
+
+          playbookComparison.overallScore.lowRisk = playbookComparison.overallScore.lowRisk ?? riskCounts.low;
+          playbookComparison.overallScore.mediumRisk = playbookComparison.overallScore.mediumRisk ?? riskCounts.medium;
+          playbookComparison.overallScore.highRisk = playbookComparison.overallScore.highRisk ?? riskCounts.high;
+          playbookComparison.overallScore.criticalRisk = playbookComparison.overallScore.criticalRisk ?? riskCounts.critical;
+          playbookComparison.overallScore.playbookMatchedClauses = playbookComparison.overallScore.playbookMatchedClauses ?? playbookMatched;
+          playbookComparison.overallScore.noPlaybookMatchClauses = playbookComparison.overallScore.noPlaybookMatchClauses ?? noPlaybookMatch;
+          playbookComparison.overallScore.averageFavourability = playbookComparison.overallScore.averageFavourability ?? (actualClauseCount > 0 ? totalFavourability / actualClauseCount : 0);
+
+          console.log("Fixed/validated overallScore:", playbookComparison.overallScore);
+        }
       } else {
         console.log("Step 8: No playbook clauses found in database");
       }
     } catch (playbookError) {
-      console.log("Step 8: Playbook comparison error (non-critical):", playbookError.message);
+      console.log("=== PLAYBOOK COMPARISON ERROR (non-critical) ===");
+      console.log("Error type:", playbookError.constructor.name);
+      console.log("Error message:", playbookError.message);
       console.log("Error stack:", playbookError.stack);
+      if (playbookError.name === 'SyntaxError') {
+        console.log("This is a JSON parsing error. The AI response may be malformed.");
+      }
+      console.log("Continuing with basic analysis only (no playbook comparison)");
     }
 
     const responseData = {

@@ -101,6 +101,17 @@ export default function AnalyzePage() {
       console.log("API Response status:", res.status);
       console.log("API Response data:", data);
 
+      if (data && data.playbookComparison) {
+        console.log("Playbook Comparison received:", {
+          hasClauseAnalysis: !!data.playbookComparison.clauseAnalysis,
+          clauseAnalysisLength: data.playbookComparison.clauseAnalysis?.length || 0,
+          hasOverallScore: !!data.playbookComparison.overallScore,
+          totalClauses: data.playbookComparison.overallScore?.totalClauses || 0,
+        });
+      } else {
+        console.log("No playbook comparison in response");
+      }
+
       if (!res.ok || !data) {
         const msg =
           (data && (data as any).error) ||
@@ -333,7 +344,10 @@ legal advice. For important decisions, please speak to a qualified lawyer.
 
         {result && (
           <div className="mt-8 space-y-6">
-            {result.playbookComparison && result.playbookComparison.overallScore.totalClauses > 0 && (
+            {result.playbookComparison &&
+             result.playbookComparison.clauseAnalysis &&
+             Array.isArray(result.playbookComparison.clauseAnalysis) &&
+             result.playbookComparison.clauseAnalysis.length > 0 ? (
               <>
                 <QuickDecisionDashboard
                   clauses={result.playbookComparison.clauseAnalysis}
@@ -350,7 +364,22 @@ legal advice. For important decisions, please speak to a qualified lawyer.
                   </p>
                 </div>
               </>
-            )}
+            ) : result.playbookComparison === null ? (
+              <div className="bg-amber-900/20 border border-amber-700/50 rounded-lg p-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div>
+                    <h3 className="text-amber-500 font-semibold mb-1">Playbook Comparison Unavailable</h3>
+                    <p className="text-sm text-slate-300">
+                      The detailed clause-by-clause analysis could not be completed. This might be due to a timeout or processing issue.
+                      The basic analysis below is still available.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <SectionCard title="Plain English summary">
               <p className="text-sm leading-relaxed whitespace-pre-line">
