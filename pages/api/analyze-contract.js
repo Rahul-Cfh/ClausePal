@@ -256,8 +256,13 @@ For each clause, provide:
 - clauseText: Verbatim text from contract (max 500 chars)
 - summary: 1-2 sentence plain English explanation
 - issues: Specific problems or concerns (array of strings)
+- unacceptablePositions: Extremely problematic terms that should not be accepted (array of strings, empty if none)
 - questions: 2-3 questions to ask the counterparty (array of strings)
 - mitigation: 2-3 suggestions to reduce risk (array of strings)
+- recommendedEdit: Suggested alternative language for this clause (string, can be empty)
+- matchedPlaybookClause: "Quick Analysis Mode" (fixed string since no playbook comparison)
+- playbookMatchFound: false (boolean, always false in quick mode)
+- deviation: "no_playbook" (fixed string since no playbook comparison)
 - favourabilityScore: 0-10 (10=very favorable, 0=unacceptable)
 - favourabilityPercentage: favourabilityScore * 10 (0-100)
 - risk: "low", "medium", "high", or "critical"
@@ -271,8 +276,13 @@ Return ONLY valid JSON:
       "clauseText": "string",
       "summary": "string",
       "issues": ["string"],
+      "unacceptablePositions": ["string"],
       "questions": ["string"],
       "mitigation": ["string"],
+      "recommendedEdit": "string",
+      "matchedPlaybookClause": "Quick Analysis Mode",
+      "playbookMatchFound": false,
+      "deviation": "no_playbook",
       "favourabilityScore": number,
       "favourabilityPercentage": number,
       "risk": "low" | "medium" | "high" | "critical"
@@ -359,6 +369,12 @@ Return ONLY valid JSON:
           let totalFavourability = 0;
 
           playbookComparison.clauseAnalysis.forEach(clause => {
+            clause.matchedPlaybookClause = clause.matchedPlaybookClause || "Quick Analysis Mode";
+            clause.playbookMatchFound = clause.playbookMatchFound !== undefined ? clause.playbookMatchFound : false;
+            clause.deviation = clause.deviation || "no_playbook";
+            clause.unacceptablePositions = clause.unacceptablePositions || [];
+            clause.recommendedEdit = clause.recommendedEdit || "";
+
             const risk = (clause.risk || 'medium').toLowerCase();
             if (risk === 'low') riskCounts.low++;
             else if (risk === 'medium') riskCounts.medium++;

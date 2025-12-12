@@ -11,15 +11,15 @@ interface ClauseAnalysisItem {
   clauseNumber?: string;
   clauseTitle: string;
   clauseText: string;
-  matchedPlaybookClause: string;
+  matchedPlaybookClause?: string;
   playbookMatchFound?: boolean;
   summary: string;
-  issues: string[];
-  unacceptablePositions: string[];
-  questions: string[];
-  mitigation: string[];
-  recommendedEdit: string;
-  deviation: 'low' | 'medium' | 'high' | 'unacceptable' | 'no_playbook';
+  issues?: string[];
+  unacceptablePositions?: string[];
+  questions?: string[];
+  mitigation?: string[];
+  recommendedEdit?: string;
+  deviation?: 'low' | 'medium' | 'high' | 'unacceptable' | 'no_playbook';
   favourabilityScore: number;
   favourabilityPercentage: number;
   risk: 'low' | 'medium' | 'high' | 'critical';
@@ -99,7 +99,7 @@ export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
       <CardHeader>
         <CardTitle className="text-2xl text-gray-900">Clause-by-Clause Analysis</CardTitle>
         <CardDescription className="text-base text-gray-600">
-          Detailed comparison against your legal playbook
+          Detailed analysis of the most critical clauses in your contract
         </CardDescription>
         <div className="flex flex-wrap gap-2 pt-4">
           <Button
@@ -168,11 +168,15 @@ export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
                         )}
                         <CardTitle className="text-lg text-gray-900">{clause.clauseTitle}</CardTitle>
                       </div>
-                      <p className={`text-xs mt-1 ${clause.playbookMatchFound === false ? 'text-orange-600 font-semibold' : 'text-gray-500'}`}>
-                        Playbook Match: {clause.matchedPlaybookClause}
-                        {clause.playbookMatchFound === false && ' ⚠'}
-                      </p>
-                      <p className="text-xs text-gray-500">Deviation: {clause.deviation.toUpperCase().replace('_', ' ')}</p>
+                      {clause.matchedPlaybookClause && (
+                        <p className={`text-xs mt-1 ${clause.playbookMatchFound === false ? 'text-orange-600 font-semibold' : 'text-gray-500'}`}>
+                          Playbook Match: {clause.matchedPlaybookClause}
+                          {clause.playbookMatchFound === false && ' ⚠'}
+                        </p>
+                      )}
+                      {clause.deviation && (
+                        <p className="text-xs text-gray-500">Deviation: {clause.deviation.toUpperCase().replace('_', ' ')}</p>
+                      )}
                     </div>
                   </div>
                   {getRiskBadge(clause.risk, clause.favourabilityScore)}
