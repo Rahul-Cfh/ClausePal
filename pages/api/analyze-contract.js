@@ -1,5 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
+import { createClient } from '@supabase/supabase-js';
 
 export const config = {
   api: {
@@ -237,18 +238,162 @@ ${trimmed}
     });
     console.log("Step 7: Final JSON parsed ✓");
 
-    console.log("Step 8: Performing simplified clause analysis...");
+    console.log("Step 8: Fetching playbook clauses from database...");
+    let playbookClauses = [];
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      if (supabaseUrl && supabaseAnonKey) {
+        const supabase = createClient(supabaseUrl, supabaseAnonKey);
+        const { data, error } = await supabase
+          .from('legal_playbook')
+          .select('*')
+          .order('clause_title', { ascending: true });
+
+        if (error) {
+          console.log('Database error (non-critical):', error.message);
+          console.log('Continuing without playbook data');
+        } else if (data && data.length > 0) {
+          playbookClauses = data;
+          console.log(`Step 8: Successfully fetched ${playbookClauses.length} playbook clauses ✓`);
+        } else {
+          console.log('Step 8: No playbook clauses found in database');
+        }
+      } else {
+        console.log('Step 8: Supabase credentials not configured, skipping playbook fetch');
+      }
+    } catch (dbError) {
+      console.log('Step 8: Database connection error (non-critical):', dbError.message);
+      console.log('Continuing without playbook data');
+    }
+
+    console.log("Step 9: Performing clause analysis with playbook comparison...");
     let playbookComparison = null;
     try {
-        const simplifiedPrompt = `You are a legal contract analyst. Analyze this contract and identify the TOP 3-5 MOST IMPORTANT clauses.
+        let analysisPrompt;
+
+        if (playbookClauses.length > 0) {
+          const playbookContext = playbookClauses.map(clause => ({
+            title: clause.clause_title,
+            standardLanguage: clause.standard_language,
+            explanation: clause.explanation,
+            unacceptablePosition: clause.unacceptable_position,
+            acceptableDeviation: clause.acceptable_level_of_deviation,
+            standardResponse: clause.standard_response
+          }));
+
+          console.log(`Using playbook-aware analysis with ${playbookClauses.length} playbook clauses`);
+
+          analysisPrompt = `You are a legal contract analyst. Your task is to extract and analyze ALL clauses from the contract, then match them against our playbook using FUZZY MATCHING.
+
+CONTRACT TEXT:
+${trimmed}
+
+PLAYBOOK CLAUSES (for fuzzy matching reference):
+${JSON.stringify(playbookContext, null, 2)}
+
+CRITICAL INSTRUCTIONS - TWO-STEP PROCESS:
+
+STEP 1: EXTRACT ALL CLAUSES FROM THE CONTRACT
+- Read the ENTIRE contract text thoroughly from beginning to end
+- Identify EVERY distinct clause, section, or provision in the contract
+- Look for:
+  * Numbered sections (1., 2., 3., etc.)
+  * Titled sections (e.g., "Purpose", "Confidential Information", "Term and Termination")
+  * Lettered subsections (a., b., c., etc.)
+  * Any other distinct contractual provisions
+- Do NOT filter based on the playbook - extract EVERYTHING
+- If the contract has 12 clauses, you must identify all 12
+- Include ALL clauses even if they seem minor or routine
+
+STEP 2: FUZZY MATCH AND ANALYZE EACH CLAUSE
+- For EACH extracted clause, perform SEMANTIC FUZZY MATCHING against the playbook
+- Match based on MEANING and INTENT, not exact wording
+- Examples of fuzzy matches:
+  * "Confidentiality" matches "CONFIDENTIAL INFORMATION"
+  * "Data Protection" matches "INFORMATION SECURITY"
+  * "Payment Terms" matches "COMPENSATION"
+  * "Termination" matches "CONTRACT TERMINATION"
+- If multiple playbook clauses could match, choose the most relevant one
+- If no playbook match exists, still provide analysis based on general legal principles
+- Provide comprehensive analysis for every single clause
+
+For each clause, you MUST provide ALL of the following fields:
+   - clauseNumber: The original number/identifier from the contract (e.g., "1", "2.a", "3", "Recital A", etc.)
+   - clauseTitle: A short, human-readable title for the clause (e.g., "CONFIDENTIAL INFORMATION", "DATA SECURITY", "PURPOSE", "GOVERNING LAW")
+   - clauseText: The actual verbatim text from the contract (quote directly, max 500 chars)
+   - matchedPlaybookClause: The title of the playbook clause this semantically matches, or "No playbook match" if none exists
+   - playbookMatchFound: boolean - true if a semantic/fuzzy playbook match was found, false otherwise
+   - summary: A concise 1-2 sentence plain English summary of what this clause means
+   - issues: Array of specific issues or problems found in this clause (concrete, actionable items; use empty array if none)
+   - unacceptablePositions: Array of any unacceptable positions found (use empty array if none)
+   - questions: Array of 2-4 specific questions to ask the counterparty about this clause
+   - mitigation: Array of 2-4 concrete suggestions to reduce risk or improve the clause
+   - recommendedEdit: Provide alternative language that would be more favorable (specific text suggestion, or "No changes recommended" if favorable)
+   - deviation: Assess deviation level from playbook standard as one of: "low", "medium", "high", "unacceptable", or "no_playbook" if no match
+   - favourabilityScore: Rate from 0-10 where:
+     * 10 = fully aligned with playbook or highly favorable
+     * 7-9 = minor acceptable deviations, still favorable
+     * 4-6 = moderate deviations requiring review
+     * 1-3 = major deviations, unfavorable
+     * 0 = contains unacceptable position
+   - favourabilityPercentage: Simply favourabilityScore * 10 (an integer from 0-100)
+   - risk: Overall risk rating as one of: "low", "medium", "high", or "critical"
+
+IMPORTANT REQUIREMENTS:
+- You MUST extract and analyze EVERY clause in the contract
+- Do NOT skip clauses just because they don't match the playbook
+- The number of clauses in your analysis should match the number of distinct clauses/sections in the contract
+- If the contract has numbered sections 1-12, your response should include all 12
+- Be exhaustive and comprehensive in your extraction
+- Use FUZZY/SEMANTIC matching for playbook comparison, not exact string matching
+
+Return ONLY a valid JSON object with this structure:
+{
+  "clauseAnalysis": [
+    {
+      "clauseNumber": "string",
+      "clauseTitle": "string",
+      "clauseText": "string",
+      "matchedPlaybookClause": "string",
+      "playbookMatchFound": boolean,
+      "summary": "string",
+      "issues": ["string", ...],
+      "unacceptablePositions": ["string", ...],
+      "questions": ["string", ...],
+      "mitigation": ["string", ...],
+      "recommendedEdit": "string",
+      "deviation": "low" | "medium" | "high" | "unacceptable" | "no_playbook",
+      "favourabilityScore": number (0-10),
+      "favourabilityPercentage": number (0-100),
+      "risk": "low" | "medium" | "high" | "critical"
+    }
+  ],
+  "overallScore": {
+    "averageFavourability": number,
+    "totalClauses": number,
+    "lowRisk": number,
+    "mediumRisk": number,
+    "highRisk": number,
+    "criticalRisk": number,
+    "playbookMatchedClauses": number,
+    "noPlaybookMatchClauses": number
+  },
+  "summary": "A brief 2-3 sentence summary of the overall contract favorability and key concerns"
+}`;
+        } else {
+          console.log('No playbook data available, using basic clause analysis');
+
+          analysisPrompt = `You are a legal contract analyst. Analyze this contract and identify ALL clauses present.
 
 CONTRACT TEXT:
 ${trimmed}
 
 INSTRUCTIONS:
-1. Identify the 3-5 most critical clauses in this contract
-2. Focus on clauses that have the most significant business or legal impact
-3. Provide detailed analysis for each clause
+1. Identify ALL clauses in this contract (not just the top ones)
+2. Provide comprehensive analysis for each clause
+3. Extract EVERY distinct clause, section, or provision
 
 For each clause, provide:
 - clauseNumber: Original identifier from contract (e.g., "1", "2", "Section A")
@@ -260,9 +405,9 @@ For each clause, provide:
 - questions: 2-3 questions to ask the counterparty (array of strings)
 - mitigation: 2-3 suggestions to reduce risk (array of strings)
 - recommendedEdit: Suggested alternative language for this clause (string, can be empty)
-- matchedPlaybookClause: "Quick Analysis Mode" (fixed string since no playbook comparison)
-- playbookMatchFound: false (boolean, always false in quick mode)
-- deviation: "no_playbook" (fixed string since no playbook comparison)
+- matchedPlaybookClause: "No playbook available" (fixed string)
+- playbookMatchFound: false (boolean, always false when no playbook)
+- deviation: "no_playbook" (fixed string)
 - favourabilityScore: 0-10 (10=very favorable, 0=unacceptable)
 - favourabilityPercentage: favourabilityScore * 10 (0-100)
 - risk: "low", "medium", "high", or "critical"
@@ -280,7 +425,7 @@ Return ONLY valid JSON:
       "questions": ["string"],
       "mitigation": ["string"],
       "recommendedEdit": "string",
-      "matchedPlaybookClause": "Quick Analysis Mode",
+      "matchedPlaybookClause": "No playbook available",
       "playbookMatchFound": false,
       "deviation": "no_playbook",
       "favourabilityScore": number,
@@ -298,16 +443,18 @@ Return ONLY valid JSON:
   },
   "summary": "2-3 sentence summary of overall contract analysis"
 }`;
+        }
 
-        console.log('Calling OpenAI for simplified clause analysis...');
-        console.log('Simplified prompt length:', simplifiedPrompt.length);
+        console.log('Calling OpenAI for clause analysis...');
+        console.log('Analysis prompt length:', analysisPrompt.length);
         console.log('Contract text length:', trimmed.length);
+        console.log('Playbook clauses available:', playbookClauses.length);
 
         const startTime = Date.now();
 
         const playbookResult = await generateText({
           model: openai('gpt-4o'),
-          prompt: simplifiedPrompt,
+          prompt: analysisPrompt,
           temperature: 0.3,
           maxTokens: 8000,
           maxRetries: 1,
@@ -315,7 +462,7 @@ Return ONLY valid JSON:
 
         const endTime = Date.now();
         const duration = ((endTime - startTime) / 1000).toFixed(2);
-        console.log(`Simplified clause analysis completed in ${duration} seconds`);
+        console.log(`Clause analysis completed in ${duration} seconds`);
 
         let cleanedPlaybookText = playbookResult.text.trim();
         if (cleanedPlaybookText.startsWith("```json")) {
@@ -333,7 +480,7 @@ Return ONLY valid JSON:
 
         playbookComparison = JSON.parse(cleanedPlaybookText);
 
-        console.log("Step 8: Clause analysis completed ✓");
+        console.log("Step 9: Clause analysis completed ✓");
         console.log("Analysis structure:", {
           hasClauseAnalysis: !!playbookComparison.clauseAnalysis,
           clauseAnalysisIsArray: Array.isArray(playbookComparison.clauseAnalysis),
@@ -415,7 +562,7 @@ Return ONLY valid JSON:
       playbookComparison: playbookComparison
     };
 
-    console.log("Step 9: Sending success response to client");
+    console.log("Step 10: Sending success response to client");
     console.log("Response includes playbookComparison:", !!playbookComparison);
     if (playbookComparison) {
       console.log("PlaybookComparison totalClauses:", playbookComparison.overallScore?.totalClauses);
