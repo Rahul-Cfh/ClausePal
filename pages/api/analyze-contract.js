@@ -1,5 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
+import { createClient } from '@supabase/supabase-js';
 
 export const config = {
   api: {
@@ -8,6 +9,10 @@ export const config = {
     },
   },
 };
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const openai = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -237,10 +242,45 @@ ${trimmed}
     });
     console.log("Step 7: Final JSON parsed ✓");
 
-    console.log("Step 8: Performing simplified clause analysis...");
+    console.log("Step 8: Fetching legal playbook from database...");
+    let playbookClauses = [];
+    try {
+      const { data, error } = await supabase
+        .from('legal_playbook')
+        .select('*')
+        .order('clause_number', { ascending: true });
+
+      if (error) {
+        console.log("Playbook fetch error:", error.message);
+      } else if (data && data.length > 0) {
+        playbookClauses = data;
+        console.log(`Fetched ${playbookClauses.length} playbook clauses from database ✓`);
+      } else {
+        console.log("No playbook clauses found in database");
+      }
+    } catch (dbError) {
+      console.log("Database error (non-critical):", dbError.message);
+    }
+
+    console.log("Step 9: Performing clause analysis with playbook comparison...");
     let playbookComparison = null;
     try {
-        const simplifiedPrompt = `You are a legal contract analyst. Analyze this contract and identify the TOP 3-5 MOST IMPORTANT clauses.
+        const hasPlaybook = playbookClauses.length > 0;
+
+        let playbookContext = "";
+        if (hasPlaybook) {
+          playbookContext = `\n\nLEGAL PLAYBOOK - STANDARD CLAUSES:\nYou have access to a legal playbook with ${playbookClauses.length} standard clauses. For each clause you analyze in the contract, compare it against these playbook standards:\n\n`;
+
+          playbookClauses.forEach(pc => {
+            playbookContext += `${pc.clause_number}. ${pc.clause_title}\n`;
+            playbookContext += `Standard Language: ${pc.standard_language}\n`;
+            playbookContext += `Acceptable Variations: ${pc.acceptable_variations}\n`;
+            playbookContext += `Red Flags: ${pc.red_flags}\n`;
+            playbookContext += `---\n`;
+          });
+        }
+
+        const simplifiedPrompt = `You are a legal contract analyst. Analyze this contract and identify the TOP 3-5 MOST IMPORTANT clauses.${playbookContext}
 
 CONTRACT TEXT:
 ${trimmed}
@@ -249,6 +289,8 @@ INSTRUCTIONS:
 1. Identify the 3-5 most critical clauses in this contract
 2. Focus on clauses that have the most significant business or legal impact
 3. Provide detailed analysis for each clause
+${hasPlaybook ? `4. IMPORTANT: For each clause, perform semantic matching against the legal playbook standards provided above
+5. Calculate deviation based on how much the contract clause differs from the playbook standard` : ''}
 
 For each clause, provide:
 - clauseNumber: Original identifier from contract (e.g., "1", "2", "Section A")
@@ -265,9 +307,21 @@ For each clause, provide:
   * negotiationResponse: A practical, calm, business-appropriate response that the reviewing party can use in the negotiation (string)
   * strategyType: One of: "soft pushback", "risk framing", "commercial tradeoff", "fallback position", or "escalation trigger"
   Focus on how the conversation will realistically play out in a negotiation meeting. Keep language practical and conversational, not legal-drafting heavy. Do NOT repeat content verbatim from issues, questions, or mitigation.
-- matchedPlaybookClause: "Quick Analysis Mode" (fixed string since no playbook comparison)
-- playbookMatchFound: false (boolean, always false in quick mode)
-- deviation: "no_playbook" (fixed string since no playbook comparison)
+${hasPlaybook ? `
+- matchedPlaybookClause: The title of the playbook clause that best matches this contract clause semantically (string). If no good match exists, use "No matching playbook clause"
+- playbookMatchFound: true if you found a semantically similar playbook clause, false otherwise (boolean)
+- deviation: Calculate deviation from the matched playbook standard:
+  * "none" - Contract language is identical or very similar to playbook standard
+  * "minor" - Small differences that don't materially change meaning
+  * "moderate" - Notable differences but within acceptable variations
+  * "major" - Significant differences or contains red flags from playbook
+  * "critical" - Completely deviates from standard or has multiple red flags
+  * "no_match" - No suitable playbook clause found to compare against
+` : `
+- matchedPlaybookClause: "Quick Analysis Mode" (fixed string since no playbook available)
+- playbookMatchFound: false (boolean, always false without playbook)
+- deviation: "no_playbook" (fixed string since no playbook available)
+`}
 - favourabilityScore: 0-10 (10=very favorable, 0=unacceptable)
 - favourabilityPercentage: favourabilityScore * 10 (0-100)
 - risk: "low", "medium", "high", or "critical"
@@ -345,7 +399,7 @@ Return ONLY valid JSON:
 
         playbookComparison = JSON.parse(cleanedPlaybookText);
 
-        console.log("Step 8: Clause analysis completed ✓");
+        console.log("Step 9: Clause analysis completed ✓");
         console.log("Analysis structure:", {
           hasClauseAnalysis: !!playbookComparison.clauseAnalysis,
           clauseAnalysisIsArray: Array.isArray(playbookComparison.clauseAnalysis),
@@ -381,11 +435,11 @@ Return ONLY valid JSON:
           let totalFavourability = 0;
 
           playbookComparison.clauseAnalysis.forEach(clause => {
-            clause.matchedPlaybookClause = clause.matchedPlaybookClause || "Quick Analysis Mode";
-            clause.playbookMatchFound = clause.playbookMatchFound !== undefined ? clause.playbookMatchFound : false;
-            clause.deviation = clause.deviation || "no_playbook";
             clause.unacceptablePositions = clause.unacceptablePositions || [];
             clause.recommendedEdit = clause.recommendedEdit || "";
+            clause.matchedPlaybookClause = clause.matchedPlaybookClause || (hasPlaybook ? "No matching playbook clause" : "Quick Analysis Mode");
+            clause.playbookMatchFound = clause.playbookMatchFound !== undefined ? clause.playbookMatchFound : false;
+            clause.deviation = clause.deviation || (hasPlaybook ? "no_match" : "no_playbook");
 
             const risk = (clause.risk || 'medium').toLowerCase();
             if (risk === 'low') riskCounts.low++;
@@ -427,7 +481,7 @@ Return ONLY valid JSON:
       playbookComparison: playbookComparison
     };
 
-    console.log("Step 9: Sending success response to client");
+    console.log("Step 10: Sending success response to client");
     console.log("Response includes playbookComparison:", !!playbookComparison);
     if (playbookComparison) {
       console.log("PlaybookComparison totalClauses:", playbookComparison.overallScore?.totalClauses);
