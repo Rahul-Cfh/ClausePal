@@ -7,6 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CheckCircle2, AlertCircle, AlertTriangle, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
+interface NegotiationStrategy {
+  counterpartyArgument: string;
+  negotiationResponse: string;
+  strategyType: 'soft pushback' | 'risk framing' | 'commercial tradeoff' | 'fallback position' | 'escalation trigger';
+}
+
 interface ClauseAnalysisItem {
   clauseNumber?: string;
   clauseTitle: string;
@@ -19,6 +25,7 @@ interface ClauseAnalysisItem {
   questions?: string[];
   mitigation?: string[];
   recommendedEdit?: string;
+  counterargumentsAndNegotiationStrategies?: NegotiationStrategy[];
   deviation?: 'low' | 'medium' | 'high' | 'unacceptable' | 'no_playbook';
   favourabilityScore: number;
   favourabilityPercentage: number;
@@ -86,6 +93,23 @@ export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
         return 'border-l-4 border-l-red-500';
       default:
         return '';
+    }
+  };
+
+  const getStrategyTypeBadge = (strategyType: string) => {
+    switch (strategyType) {
+      case 'soft pushback':
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-300 text-xs">Soft Pushback</Badge>;
+      case 'risk framing':
+        return <Badge className="bg-orange-100 text-orange-800 border-orange-300 text-xs">Risk Framing</Badge>;
+      case 'commercial tradeoff':
+        return <Badge className="bg-green-100 text-green-800 border-green-300 text-xs">Commercial Tradeoff</Badge>;
+      case 'fallback position':
+        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300 text-xs">Fallback Position</Badge>;
+      case 'escalation trigger':
+        return <Badge className="bg-red-100 text-red-800 border-red-300 text-xs">Escalation Trigger</Badge>;
+      default:
+        return null;
     }
   };
 
@@ -236,6 +260,31 @@ export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
                   <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
                     <h4 className="font-semibold text-sm mb-2 text-purple-900">Recommended Alternative Language</h4>
                     <p className="text-sm text-purple-800 italic leading-relaxed">{clause.recommendedEdit}</p>
+                  </div>
+                )}
+
+                {clause.counterargumentsAndNegotiationStrategies && clause.counterargumentsAndNegotiationStrategies.length > 0 && (
+                  <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+                    <h4 className="font-semibold text-sm mb-3 text-indigo-900">Counterarguments & Negotiation Strategies</h4>
+                    <div className="space-y-3">
+                      {clause.counterargumentsAndNegotiationStrategies.map((strategy, idx) => (
+                        <div key={idx} className="p-3 bg-white border border-indigo-100 rounded-md">
+                          <div className="flex items-start gap-2 mb-2">
+                            {getStrategyTypeBadge(strategy.strategyType)}
+                          </div>
+                          <div className="space-y-2">
+                            <div>
+                              <p className="text-xs font-semibold text-gray-600 mb-1">Their Argument:</p>
+                              <p className="text-sm text-gray-700 italic">"{strategy.counterpartyArgument}"</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold text-indigo-700 mb-1">Your Response:</p>
+                              <p className="text-sm text-indigo-900 font-medium">{strategy.negotiationResponse}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 

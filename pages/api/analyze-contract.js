@@ -260,6 +260,11 @@ For each clause, provide:
 - questions: 2-3 questions to ask the counterparty (array of strings)
 - mitigation: 2-3 suggestions to reduce risk (array of strings)
 - recommendedEdit: Suggested alternative language for this clause (string, can be empty)
+- counterargumentsAndNegotiationStrategies: Array of negotiation strategy objects (minimum 2, ideally 3-5 per clause). Each object must have:
+  * counterpartyArgument: A realistic argument the counterparty might make to justify or defend their clause (string)
+  * negotiationResponse: A practical, calm, business-appropriate response that the reviewing party can use in the negotiation (string)
+  * strategyType: One of: "soft pushback", "risk framing", "commercial tradeoff", "fallback position", or "escalation trigger"
+  Focus on how the conversation will realistically play out in a negotiation meeting. Keep language practical and conversational, not legal-drafting heavy. Do NOT repeat content verbatim from issues, questions, or mitigation.
 - matchedPlaybookClause: "Quick Analysis Mode" (fixed string since no playbook comparison)
 - playbookMatchFound: false (boolean, always false in quick mode)
 - deviation: "no_playbook" (fixed string since no playbook comparison)
@@ -280,6 +285,13 @@ Return ONLY valid JSON:
       "questions": ["string"],
       "mitigation": ["string"],
       "recommendedEdit": "string",
+      "counterargumentsAndNegotiationStrategies": [
+        {
+          "counterpartyArgument": "string",
+          "negotiationResponse": "string",
+          "strategyType": "soft pushback" | "risk framing" | "commercial tradeoff" | "fallback position" | "escalation trigger"
+        }
+      ],
       "matchedPlaybookClause": "Quick Analysis Mode",
       "playbookMatchFound": false,
       "deviation": "no_playbook",
