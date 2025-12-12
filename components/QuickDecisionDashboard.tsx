@@ -93,7 +93,7 @@ export function QuickDecisionDashboard({ clauses, overallScore, summary }: Quick
       <CardHeader>
         <CardTitle className="text-2xl text-gray-900">Quick Decision Dashboard</CardTitle>
         <CardDescription className="text-base text-gray-600">
-          Playbook-based clause analysis for faster decision making
+          Analysis of key contract clauses for faster decision making
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">

@@ -365,16 +365,15 @@ legal advice. For important decisions, please speak to a qualified lawyer.
                 </div>
               </>
             ) : result.playbookComparison === null ? (
-              <div className="bg-amber-900/20 border border-amber-700/50 rounded-lg p-4 mb-6">
+              <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4 mb-6">
                 <div className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  <svg className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <div>
-                    <h3 className="text-amber-500 font-semibold mb-1">Playbook Comparison Unavailable</h3>
+                    <h3 className="text-blue-400 font-semibold mb-1">Quick Analysis Mode</h3>
                     <p className="text-sm text-slate-300">
-                      The detailed clause-by-clause analysis could not be completed. This might be due to a timeout or processing issue.
-                      The basic analysis below is still available.
+                      This contract has been analyzed using the quick overview mode. The general analysis below is available.
                     </p>
                   </div>
                 </div>
