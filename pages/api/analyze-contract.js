@@ -1,6 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
-import { createClient } from '@supabase/supabase-js';
 
 export const config = {
   api: {
@@ -76,29 +75,6 @@ export default async function handler(req, res) {
     console.log("Step 3: Trimming contract text...");
     const trimmed = contractText.slice(0, 12000);
     console.log("Step 3: Contract trimmed to", trimmed.length, "characters ✓");
-
-    console.log("Step 3.5: Fetching playbook from Supabase...");
-    let playbookClauses = [];
-    try {
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      );
-
-      const { data, error } = await supabase
-        .from('legal_playbook')
-        .select('clause_title, standard_language, explanation, unacceptable_position, acceptable_level_of_deviation, standard_response')
-        .order('clause_title', { ascending: true });
-
-      if (error) {
-        console.log("WARNING: Could not fetch playbook:", error.message);
-      } else {
-        playbookClauses = data || [];
-        console.log("Step 3.5: Fetched", playbookClauses.length, "playbook clauses ✓");
-      }
-    } catch (supabaseError) {
-      console.log("WARNING: Supabase error (will continue without playbook):", supabaseError.message);
-    }
 
     const systemPrompt = `
 You are a contract explainer for non-lawyers who outputs structured JSON.
@@ -261,61 +237,35 @@ ${trimmed}
     });
     console.log("Step 7: Final JSON parsed ✓");
 
-    console.log("Step 8: Performing playbook-based clause analysis...");
+    console.log("Step 8: Performing simplified clause analysis...");
     let playbookComparison = null;
     try {
-        const hasPlaybook = playbookClauses && playbookClauses.length > 0;
-        console.log("Playbook available:", hasPlaybook, "| Clauses count:", playbookClauses.length);
-
-        const playbookContext = hasPlaybook
-          ? `\n\nYOUR PLAYBOOK (Company's preferred clause positions):\n${JSON.stringify(
-              playbookClauses.map(p => ({
-                title: p.clause_title,
-                standardLanguage: p.standard_language,
-                unacceptablePosition: p.unacceptable_position,
-                acceptableDeviation: p.acceptable_level_of_deviation
-              })), null, 2
-            )}`
-          : '\n\nNOTE: No playbook available - analyze based on general legal best practices.';
-
-        const simplifiedPrompt = `You are a legal contract analyst. Analyze this contract and identify the TOP 7-10 MOST IMPORTANT clauses.
+        const simplifiedPrompt = `You are a legal contract analyst. Analyze this contract and identify the TOP 3-5 MOST IMPORTANT clauses.
 
 CONTRACT TEXT:
 ${trimmed}
-${playbookContext}
 
 INSTRUCTIONS:
-1. Identify the 7-10 most critical clauses in this contract
+1. Identify the 3-5 most critical clauses in this contract
 2. Focus on clauses that have the most significant business or legal impact
-3. For EACH clause, compare it against the playbook (if available) to assess favorability
+3. Provide detailed analysis for each clause
 
 For each clause, provide:
 - clauseNumber: Original identifier from contract (e.g., "1", "2", "Section A")
-- clauseTitle: Short, clear title matching playbook terminology when possible (e.g., "CONFIDENTIAL INFORMATION", "DATA SECURITY")
+- clauseTitle: Short, clear title (e.g., "Confidentiality", "Payment Terms", "Liability")
 - clauseText: Verbatim text from contract (max 500 chars)
 - summary: 1-2 sentence plain English explanation
-- issues: Specific problems or concerns compared to playbook standards (array of strings, concrete actionable items)
-- unacceptablePositions: Terms that violate playbook's unacceptable positions (array of strings, empty if none)
-- questions: 2-4 specific questions to ask the counterparty (array of strings)
-- mitigation: 2-4 concrete suggestions to reduce risk or improve the clause (array of strings)
-- recommendedEdit: Alternative language that aligns better with playbook standards (string, or "Aligned with playbook" if favorable)
-- matchedPlaybookClause: The playbook clause title this matches, or "No direct playbook match" if none exists
-- playbookMatchFound: boolean - true if matched to a playbook clause, false otherwise
-- deviation: Assess how much this deviates from playbook standards:
-  * "low" = Minor acceptable differences, aligns well
-  * "medium" = Moderate differences, acceptable but worth reviewing
-  * "high" = Significant differences, requires attention
-  * "unacceptable" = Contains positions marked as unacceptable in playbook
-  * "no_playbook" = No matching playbook clause to compare against
-- favourabilityScore: Rate from 0-10 based on playbook comparison:
-  * 9-10 = Fully aligned with playbook or better
-  * 7-8 = Minor acceptable deviations
-  * 5-6 = Moderate deviations requiring review
-  * 3-4 = Significant unfavorable deviations
-  * 1-2 = Major problems, far from playbook standards
-  * 0 = Contains unacceptable positions
+- issues: Specific problems or concerns (array of strings)
+- unacceptablePositions: Extremely problematic terms that should not be accepted (array of strings, empty if none)
+- questions: 2-3 questions to ask the counterparty (array of strings)
+- mitigation: 2-3 suggestions to reduce risk (array of strings)
+- recommendedEdit: Suggested alternative language for this clause (string, can be empty)
+- matchedPlaybookClause: "Quick Analysis Mode" (fixed string since no playbook comparison)
+- playbookMatchFound: false (boolean, always false in quick mode)
+- deviation: "no_playbook" (fixed string since no playbook comparison)
+- favourabilityScore: 0-10 (10=very favorable, 0=unacceptable)
 - favourabilityPercentage: favourabilityScore * 10 (0-100)
-- risk: Overall risk rating as "low", "medium", "high", or "critical"
+- risk: "low", "medium", "high", or "critical"
 
 Return ONLY valid JSON:
 {
@@ -330,9 +280,9 @@ Return ONLY valid JSON:
       "questions": ["string"],
       "mitigation": ["string"],
       "recommendedEdit": "string",
-      "matchedPlaybookClause": "string",
-      "playbookMatchFound": boolean,
-      "deviation": "low" | "medium" | "high" | "unacceptable" | "no_playbook",
+      "matchedPlaybookClause": "Quick Analysis Mode",
+      "playbookMatchFound": false,
+      "deviation": "no_playbook",
       "favourabilityScore": number,
       "favourabilityPercentage": number,
       "risk": "low" | "medium" | "high" | "critical"
@@ -346,13 +296,12 @@ Return ONLY valid JSON:
     "highRisk": number,
     "criticalRisk": number
   },
-  "summary": "2-3 sentence summary of overall contract analysis and playbook alignment"
+  "summary": "2-3 sentence summary of overall contract analysis"
 }`;
 
-        console.log('Calling OpenAI for playbook-based clause analysis...');
-        console.log('Prompt length:', simplifiedPrompt.length);
+        console.log('Calling OpenAI for simplified clause analysis...');
+        console.log('Simplified prompt length:', simplifiedPrompt.length);
         console.log('Contract text length:', trimmed.length);
-        console.log('Playbook clauses available:', playbookClauses.length);
 
         const startTime = Date.now();
 
@@ -366,7 +315,7 @@ Return ONLY valid JSON:
 
         const endTime = Date.now();
         const duration = ((endTime - startTime) / 1000).toFixed(2);
-        console.log(`Playbook-based clause analysis completed in ${duration} seconds`);
+        console.log(`Simplified clause analysis completed in ${duration} seconds`);
 
         let cleanedPlaybookText = playbookResult.text.trim();
         if (cleanedPlaybookText.startsWith("```json")) {
@@ -384,7 +333,7 @@ Return ONLY valid JSON:
 
         playbookComparison = JSON.parse(cleanedPlaybookText);
 
-        console.log("Step 8: Playbook-based clause analysis completed ✓");
+        console.log("Step 8: Clause analysis completed ✓");
         console.log("Analysis structure:", {
           hasClauseAnalysis: !!playbookComparison.clauseAnalysis,
           clauseAnalysisIsArray: Array.isArray(playbookComparison.clauseAnalysis),
@@ -418,21 +367,13 @@ Return ONLY valid JSON:
 
           const riskCounts = { low: 0, medium: 0, high: 0, critical: 0 };
           let totalFavourability = 0;
-          let playbookMatchCount = 0;
-          let noPlaybookMatchCount = 0;
 
           playbookComparison.clauseAnalysis.forEach(clause => {
-            clause.matchedPlaybookClause = clause.matchedPlaybookClause || "No direct playbook match";
+            clause.matchedPlaybookClause = clause.matchedPlaybookClause || "Quick Analysis Mode";
             clause.playbookMatchFound = clause.playbookMatchFound !== undefined ? clause.playbookMatchFound : false;
-            clause.deviation = clause.deviation || (clause.playbookMatchFound ? "medium" : "no_playbook");
+            clause.deviation = clause.deviation || "no_playbook";
             clause.unacceptablePositions = clause.unacceptablePositions || [];
-            clause.recommendedEdit = clause.recommendedEdit || "No specific edit recommended";
-
-            if (clause.playbookMatchFound) {
-              playbookMatchCount++;
-            } else {
-              noPlaybookMatchCount++;
-            }
+            clause.recommendedEdit = clause.recommendedEdit || "";
 
             const risk = (clause.risk || 'medium').toLowerCase();
             if (risk === 'low') riskCounts.low++;
@@ -449,11 +390,8 @@ Return ONLY valid JSON:
           playbookComparison.overallScore.highRisk = riskCounts.high;
           playbookComparison.overallScore.criticalRisk = riskCounts.critical;
           playbookComparison.overallScore.averageFavourability = actualClauseCount > 0 ? totalFavourability / actualClauseCount : 0;
-          playbookComparison.overallScore.playbookMatchedClauses = playbookMatchCount;
-          playbookComparison.overallScore.noPlaybookMatchClauses = noPlaybookMatchCount;
 
           console.log("Calculated overallScore:", playbookComparison.overallScore);
-          console.log("Playbook match stats: Matched =", playbookMatchCount, "| No match =", noPlaybookMatchCount);
         }
     } catch (analysisError) {
       console.log("=== CLAUSE ANALYSIS ERROR (non-critical) ===");
@@ -469,7 +407,7 @@ Return ONLY valid JSON:
         console.log("This is a rate limit error. Too many requests to OpenAI API.");
       }
 
-      console.log("Continuing with basic analysis only (no playbook-based clause analysis)");
+      console.log("Continuing with basic analysis only (no detailed clause analysis)");
     }
 
     const responseData = {
