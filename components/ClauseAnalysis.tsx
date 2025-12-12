@@ -192,13 +192,13 @@ export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
                         )}
                         <CardTitle className="text-lg text-gray-900">{clause.clauseTitle}</CardTitle>
                       </div>
-                      {clause.matchedPlaybookClause && (
+                      {clause.matchedPlaybookClause && clause.deviation !== 'no_playbook' && (
                         <p className={`text-xs mt-1 ${clause.playbookMatchFound === false ? 'text-orange-600 font-semibold' : 'text-gray-500'}`}>
                           Playbook Match: {clause.matchedPlaybookClause}
                           {clause.playbookMatchFound === false && ' ⚠'}
                         </p>
                       )}
-                      {clause.deviation && (
+                      {clause.deviation && clause.deviation !== 'no_playbook' && (
                         <p className="text-xs text-gray-500">Deviation: {clause.deviation.toUpperCase().replace('_', ' ')}</p>
                       )}
                     </div>
