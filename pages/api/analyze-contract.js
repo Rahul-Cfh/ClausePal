@@ -20,6 +20,17 @@ const openai = createOpenAI({
   },
 });
 
+const openaiExtended = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  compatibility: "strict",
+  fetch: (url, init) => {
+    return fetch(url, {
+      ...init,
+      signal: AbortSignal.timeout(180000),
+    });
+  },
+});
+
 export default async function handler(req, res) {
   console.log("=== API Handler Called ===");
   console.log("Method:", req.method);
@@ -344,12 +355,23 @@ Return ONLY a valid JSON object with this structure:
 }`;
 
         console.log('Calling OpenAI for playbook comparison...');
+        console.log('Playbook prompt length:', playbookPrompt.length);
+        console.log('Contract text length:', trimmed.length);
+        console.log('Using extended timeout (180 seconds) for playbook comparison');
+
+        const startTime = Date.now();
+
         const playbookResult = await generateText({
-          model: openai('gpt-4o'),
+          model: openaiExtended('gpt-4o'),
           prompt: playbookPrompt,
           temperature: 0.3,
-          maxRetries: 2,
+          maxTokens: 16000,
+          maxRetries: 1,
         });
+
+        const endTime = Date.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(2);
+        console.log(`Playbook comparison API call completed successfully in ${duration} seconds`);
 
         let cleanedPlaybookText = playbookResult.text.trim();
         if (cleanedPlaybookText.startsWith("```json")) {
@@ -443,11 +465,21 @@ Return ONLY a valid JSON object with this structure:
     } catch (playbookError) {
       console.log("=== PLAYBOOK COMPARISON ERROR (non-critical) ===");
       console.log("Error type:", playbookError.constructor.name);
+      console.log("Error name:", playbookError.name);
       console.log("Error message:", playbookError.message);
       console.log("Error stack:", playbookError.stack);
+
       if (playbookError.name === 'SyntaxError') {
         console.log("This is a JSON parsing error. The AI response may be malformed.");
+      } else if (playbookError.name === 'AbortError' || playbookError.message?.includes('timeout')) {
+        console.log("This is a timeout error. The playbook comparison took too long.");
+        console.log("Consider: reducing contract text length, simplifying prompt, or increasing timeout further.");
+      } else if (playbookError.message?.includes('rate limit')) {
+        console.log("This is a rate limit error. Too many requests to OpenAI API.");
+      } else if (playbookError.message?.includes('token')) {
+        console.log("This may be a token limit error. The prompt or response may be too long.");
       }
+
       console.log("Continuing with basic analysis only (no playbook comparison)");
     }
 
