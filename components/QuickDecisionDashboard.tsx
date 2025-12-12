@@ -89,10 +89,10 @@ export function QuickDecisionDashboard({ clauses, overallScore, summary }: Quick
   };
 
   return (
-    <Card className={`border-2 ${getHealthBgColor(healthScore)}`}>
+    <Card className={`border-2 ${getHealthBgColor(healthScore)} bg-white text-gray-900`}>
       <CardHeader>
-        <CardTitle className="text-2xl">Quick Decision Dashboard</CardTitle>
-        <CardDescription className="text-base">
+        <CardTitle className="text-2xl text-gray-900">Quick Decision Dashboard</CardTitle>
+        <CardDescription className="text-base text-gray-600">
           Playbook-based clause analysis for faster decision making
         </CardDescription>
       </CardHeader>
@@ -119,8 +119,8 @@ export function QuickDecisionDashboard({ clauses, overallScore, summary }: Quick
           </div>
         </div>
 
-        <div className="pt-4 border-t">
-          <h4 className="font-semibold text-sm mb-3">Clause-by-Clause Analysis</h4>
+        <div className="pt-4 border-t border-gray-200">
+          <h4 className="font-semibold text-sm mb-3 text-gray-900">Clause-by-Clause Analysis</h4>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -134,7 +134,7 @@ export function QuickDecisionDashboard({ clauses, overallScore, summary }: Quick
               <tbody>
                 {clauses.map((clause, index) => (
                   <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-2 font-medium">
+                    <td className="py-3 px-2 font-medium text-gray-900">
                       <div className="flex items-center gap-2">
                         {clause.clauseNumber && (
                           <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
@@ -169,8 +169,8 @@ export function QuickDecisionDashboard({ clauses, overallScore, summary }: Quick
           </div>
         </div>
 
-        <div className="pt-4 border-t">
-          <h4 className="font-semibold text-sm mb-2">Summary</h4>
+        <div className="pt-4 border-t border-gray-200">
+          <h4 className="font-semibold text-sm mb-2 text-gray-900">Summary</h4>
           <p className="text-sm text-gray-700 leading-relaxed">{summary}</p>
         </div>
 

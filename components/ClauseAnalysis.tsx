@@ -95,10 +95,10 @@ export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
   });
 
   return (
-    <Card>
+    <Card className="bg-white text-gray-900">
       <CardHeader>
-        <CardTitle className="text-2xl">Clause-by-Clause Analysis</CardTitle>
-        <CardDescription className="text-base">
+        <CardTitle className="text-2xl text-gray-900">Clause-by-Clause Analysis</CardTitle>
+        <CardDescription className="text-base text-gray-600">
           Detailed comparison against your legal playbook
         </CardDescription>
         <div className="flex flex-wrap gap-2 pt-4">
@@ -154,7 +154,7 @@ export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
           </div>
         ) : (
           filteredClauses.map((clause, index) => (
-            <Card key={index} className={`${getCardBorderColor(clause.risk)}`}>
+            <Card key={index} className={`${getCardBorderColor(clause.risk)} bg-white text-gray-900`}>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3 flex-1">
@@ -166,7 +166,7 @@ export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
                             {clause.clauseNumber}
                           </span>
                         )}
-                        <CardTitle className="text-lg">{clause.clauseTitle}</CardTitle>
+                        <CardTitle className="text-lg text-gray-900">{clause.clauseTitle}</CardTitle>
                       </div>
                       <p className={`text-xs mt-1 ${clause.playbookMatchFound === false ? 'text-orange-600 font-semibold' : 'text-gray-500'}`}>
                         Playbook Match: {clause.matchedPlaybookClause}
