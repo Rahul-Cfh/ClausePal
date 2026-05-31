@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, Download, Upload } from "lucide-react";
 import { QuickDecisionDashboard } from "@/components/QuickDecisionDashboard";
 import { ClauseAnalysis } from "@/components/ClauseAnalysis";
+import { OnboardingModal, type UserContext } from "@/components/OnboardingModal";
 
 type ClauseAnalysisItem = {
   clauseTitle: string;
@@ -69,6 +70,69 @@ export default function AnalyzePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfFileName, setPdfFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [userContext, setUserContext] = useState<UserContext | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('clausepal_context');
+    if (stored) {
+      try {
+        setUserContext(JSON.parse(stored));
+      } catch {
+        setShowOnboarding(true);
+      }
+    } else {
+      setShowOnboarding(true);
+    }
+  }, []);
+
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setPdfLoading(true);
+    setPdfFileName(file.name);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/extract-pdf-text", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to extract text from PDF.");
+      }
+
+      const stripped = data.text
+        .split('\n')
+        .filter((line: string) => !line.trim().match(/^-- \d+ of \d+ --$/))
+        .join('\n')
+        .trim();
+
+      if (stripped.length < 100) {
+        setError("Could not extract text from this PDF. It may be a scanned document. Please copy and paste the contract text manually instead.");
+        setPdfFileName(null);
+        return;
+      }
+
+      setContractText(data.text);
+    } catch (err: any) {
+      setError(err.message || "Failed to read PDF.");
+      setPdfFileName(null);
+    } finally {
+      setPdfLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,6 +154,7 @@ export default function AnalyzePage() {
           contractText,
           contractType,
           country,
+          userContext,
         }),
       });
 
@@ -248,6 +313,7 @@ legal advice. For important decisions, please speak to a qualified lawyer.
   };
 
   return (
+    <>
     <div className="min-h-screen bg-slate-950 text-slate-50">
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
@@ -277,10 +343,32 @@ legal advice. For important decisions, please speak to a qualified lawyer.
         </div>
 
         <h1 className="text-3xl font-semibold mb-2">Analyze your contract</h1>
-        <p className="text-slate-300 mb-6">
+        <p className="text-slate-300 mb-4">
           Paste your contract below and we&apos;ll break it down into simple,
           human language. This is not legal advice.
         </p>
+
+        {userContext && (
+          <div className="mb-6 flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-300">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+              <span className="font-medium text-slate-100">{userContext.role}</span>
+              {userContext.companyName && (
+                <span className="text-slate-500">· {userContext.companyName}</span>
+              )}
+              <span className="text-slate-500">· {userContext.industry}</span>
+              <span className="text-slate-500">· {userContext.jurisdiction}</span>
+              <span className="text-slate-500">· Focus: {userContext.mainConcern}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowOnboarding(true)}
+              className="text-xs text-slate-500 hover:text-slate-300 transition-colors flex-shrink-0 ml-4"
+            >
+              Edit
+            </button>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -312,18 +400,42 @@ legal advice. For important decisions, please speak to a qualified lawyer.
           </div>
 
           <div>
-            <label className="block text-sm mb-1">
-              Paste your contract text here
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm">Paste your contract text or upload a PDF</label>
+              <div className="flex items-center gap-2">
+                {pdfLoading && (
+                  <span className="text-xs text-slate-400">Extracting text from PDF...</span>
+                )}
+                {pdfFileName && !pdfLoading && (
+                  <span className="text-xs text-emerald-400 truncate max-w-[200px]">{pdfFileName}</span>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  onChange={handlePdfUpload}
+                />
+                <button
+                  type="button"
+                  disabled={pdfLoading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-300 hover:text-slate-100 hover:border-slate-600 transition-colors disabled:opacity-50"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Upload PDF
+                </button>
+              </div>
+            </div>
             <textarea
               value={contractText}
               onChange={(e) => setContractText(e.target.value)}
               rows={16}
               className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-mono"
-              placeholder="Paste the full contract text..."
+              placeholder="Paste the full contract text, or upload a PDF above..."
             />
             <p className="mt-1 text-xs text-slate-500">
-              For this MVP, we only support text. Remove any images or signatures.
+              PDFs must be text-based (not scanned images).
             </p>
           </div>
 
@@ -491,6 +603,17 @@ legal advice. For important decisions, please speak to a qualified lawyer.
         )}
       </div>
     </div>
+
+    {showOnboarding && (
+      <OnboardingModal
+        initialContext={userContext ?? undefined}
+        onComplete={(ctx) => {
+          setUserContext(ctx);
+          setShowOnboarding(false);
+        }}
+      />
+    )}
+    </>
   );
 }
 

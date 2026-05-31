@@ -49,6 +49,7 @@ export default async function handler(req, res) {
       typeof body.contractText === "string" ? body.contractText.trim() : "";
     const contractType = body.contractType || "Unknown";
     const country = body.country || "Unknown";
+    const userContext = body.userContext || null;
 
     if (!contractText) {
       console.log("ERROR: No contract text received");
@@ -59,8 +60,21 @@ export default async function handler(req, res) {
     console.log("Step 2: Request body parsed ✓");
 
     console.log("Step 3: Trimming contract text...");
-    const trimmed = contractText.slice(0, 12000);
+    const trimmed = contractText.slice(0, 15000);
     console.log("Step 3: Contract trimmed to", trimmed.length, "characters ✓");
+
+    const contextBlock = userContext
+      ? `USER PROFILE:
+- Role: ${userContext.role}${userContext.companyName ? `\n- Company/Project: ${userContext.companyName}` : ''}
+- Industry: ${userContext.industry}
+- Main concern: ${userContext.mainConcern}
+- Jurisdiction: ${userContext.jurisdiction}
+
+Tailor your analysis for this specific user. Pay particular attention to ${userContext.mainConcern} clauses.
+Frame risks and obligations from the perspective of a ${userContext.role} in the ${userContext.industry} industry operating under ${userContext.jurisdiction} law.
+
+`
+      : "";
 
     const systemPrompt = `
 You are a contract explainer for non-lawyers who outputs structured JSON.
@@ -157,7 +171,7 @@ Instructions:
 `;
 
     const userPrompt = `
-Contract type: ${contractType}
+${contextBlock}Contract type: ${contractType}
 Country: ${country}
 
 Contract:
@@ -175,7 +189,7 @@ ${trimmed}
     try {
       const result = await anthropic.messages.create({
         model: "claude-sonnet-4-5",
-        max_tokens: 8000,
+        max_tokens: 16000,
         temperature: 0.2,
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
@@ -261,7 +275,7 @@ ${trimmed}
 
         const simplifiedPrompt = `You are a legal contract analyst. Analyze this contract and identify the TOP 3-5 MOST IMPORTANT clauses.${playbookContext}
 
-CONTRACT TEXT:
+${contextBlock}CONTRACT TEXT:
 ${trimmed}
 
 INSTRUCTIONS:
@@ -352,7 +366,7 @@ Return ONLY valid JSON:
 
         const playbookResult = await anthropic.messages.create({
           model: "claude-sonnet-4-5",
-          max_tokens: 8000,
+          max_tokens: 16000,
           temperature: 0.3,
           messages: [{ role: "user", content: simplifiedPrompt }],
         });
@@ -361,21 +375,37 @@ Return ONLY valid JSON:
         const duration = ((endTime - startTime) / 1000).toFixed(2);
         console.log(`Simplified clause analysis completed in ${duration} seconds`);
 
-        let cleanedPlaybookText = playbookResult.content[0].text.trim();
-        if (cleanedPlaybookText.startsWith("```json")) {
-          cleanedPlaybookText = cleanedPlaybookText.slice(7);
-        } else if (cleanedPlaybookText.startsWith("```")) {
-          cleanedPlaybookText = cleanedPlaybookText.slice(3);
-        }
-        if (cleanedPlaybookText.endsWith("```")) {
-          cleanedPlaybookText = cleanedPlaybookText.slice(0, -3);
-        }
-        cleanedPlaybookText = cleanedPlaybookText.trim();
+        const cleanJson = (raw) => {
+          let t = raw.trim();
+          if (t.startsWith("```json")) t = t.slice(7);
+          else if (t.startsWith("```")) t = t.slice(3);
+          if (t.endsWith("```")) t = t.slice(0, -3);
+          return t.trim();
+        };
+
+        let cleanedPlaybookText = cleanJson(playbookResult.content[0].text);
 
         console.log("Cleaned analysis text (first 500 chars):", cleanedPlaybookText.slice(0, 500));
         console.log("Cleaned analysis text (last 200 chars):", cleanedPlaybookText.slice(-200));
 
-        playbookComparison = JSON.parse(cleanedPlaybookText);
+        try {
+          playbookComparison = JSON.parse(cleanedPlaybookText);
+        } catch (parseError) {
+          console.log("JSON parse failed on first attempt, retrying with 3-clause limit...");
+          const retryPrompt = simplifiedPrompt.replace(
+            /identify the TOP 3-5 MOST IMPORTANT clauses/,
+            "identify the TOP 3 MOST IMPORTANT clauses"
+          );
+          const retryResult = await anthropic.messages.create({
+            model: "claude-sonnet-4-5",
+            max_tokens: 16000,
+            temperature: 0.3,
+            messages: [{ role: "user", content: retryPrompt }],
+          });
+          const cleanedRetry = cleanJson(retryResult.content[0].text);
+          playbookComparison = JSON.parse(cleanedRetry);
+          console.log("Retry parse succeeded ✓");
+        }
 
         console.log("Step 9: Clause analysis completed ✓");
         console.log("Analysis structure:", {

@@ -1,7 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import formidable from 'formidable';
 import fs from 'fs';
-import { PDFParse } from 'pdf-parse';
+// pdf-parse v2 exports PDFParse as a named class
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { PDFParse } = require('pdf-parse') as typeof import('pdf-parse');
 
 export const config = {
   api: {
@@ -24,8 +26,7 @@ async function extractTextWithPdfParse(buffer: Buffer): Promise<string> {
     const textResult = await parser.getText();
     const text = textResult.text;
 
-    console.log(`[PDF Extraction] Document loaded successfully. Pages: ${textResult.pages.length}`);
-    console.log(`[PDF Extraction] Text extracted: ${text.length} chars`);
+    console.log(`[PDF Extraction] Pages: ${textResult.pages.length}, chars: ${text.length}`);
 
     return text.trim();
   } catch (error) {
