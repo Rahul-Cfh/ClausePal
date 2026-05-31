@@ -1,5 +1,4 @@
-import { createOpenAI } from "@ai-sdk/openai";
-import { generateText } from "ai";
+import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from '@supabase/supabase-js';
 
 export const config = {
@@ -14,26 +13,8 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  compatibility: "strict",
-  fetch: (url, init) => {
-    return fetch(url, {
-      ...init,
-      signal: AbortSignal.timeout(120000),
-    });
-  },
-});
-
-const openaiExtended = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  compatibility: "strict",
-  fetch: (url, init) => {
-    return fetch(url, {
-      ...init,
-      signal: AbortSignal.timeout(180000),
-    });
-  },
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 export default async function handler(req, res) {
@@ -47,11 +28,11 @@ export default async function handler(req, res) {
     }
 
     console.log("Step 1: Checking API key...");
-    if (!process.env.OPENAI_API_KEY) {
-      console.log("ERROR: OpenAI API key not configured");
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.log("ERROR: Anthropic API key not configured");
       return res
         .status(500)
-        .json({ error: "Server OpenAI API key is not configured." });
+        .json({ error: "Server Anthropic API key is not configured." });
     }
     console.log("Step 1: API key found ✓");
 
@@ -185,30 +166,28 @@ ${trimmed}
 """
 `;
 
-    console.log("Step 4: Preparing OpenAI API call...");
-    console.log("Model: gpt-4o-mini");
+    console.log("Step 4: Preparing Anthropic API call...");
+    console.log("Model: claude-sonnet-4-5");
     console.log("Contract type:", contractType);
     console.log("Country:", country);
 
     let text;
     try {
-      const result = await generateText({
-        model: openai("gpt-4o-mini"),
+      const result = await anthropic.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 8000,
         temperature: 0.2,
-        maxTokens: 8000,
         system: systemPrompt,
-        prompt: userPrompt,
-        maxRetries: 2,
+        messages: [{ role: "user", content: userPrompt }],
       });
-      text = result.text;
-      console.log("Step 4: OpenAI API call completed ✓");
+      text = result.content[0].text;
+      console.log("Step 4: Anthropic API call completed ✓");
     } catch (apiError) {
-      console.log("OpenAI API Error:", apiError.message);
-      console.log("Full error:", JSON.stringify(apiError, null, 2));
-      throw new Error(`OpenAI API failed: ${apiError.message}`);
+      console.log("Anthropic API Error:", apiError.message);
+      throw new Error(`Anthropic API failed: ${apiError.message}`);
     }
 
-    console.log("Step 5: Processing OpenAI response...");
+    console.log("Step 5: Processing Anthropic response...");
     console.log("Response text (first 300 chars):", text.slice(0, 300));
     console.log("Step 5: Response received ✓");
 
@@ -248,7 +227,7 @@ ${trimmed}
       const { data, error } = await supabase
         .from('legal_playbook')
         .select('*')
-        .order('clause_number', { ascending: true });
+        .order('created_at', { ascending: true });
 
       if (error) {
         console.log("Playbook fetch error:", error.message);
@@ -272,7 +251,7 @@ ${trimmed}
           playbookContext = `\n\nLEGAL PLAYBOOK - STANDARD CLAUSES:\nYou have access to a legal playbook with ${playbookClauses.length} standard clauses. For each clause you analyze in the contract, compare it against these playbook standards:\n\n`;
 
           playbookClauses.forEach(pc => {
-            playbookContext += `${pc.clause_number}. ${pc.clause_title}\n`;
+            playbookContext += `${pc.clause_title}\n`;
             playbookContext += `Standard Language: ${pc.standard_language}\n`;
             playbookContext += `Acceptable Variations: ${pc.acceptable_variations}\n`;
             playbookContext += `Red Flags: ${pc.red_flags}\n`;
@@ -365,25 +344,24 @@ Return ONLY valid JSON:
   "summary": "2-3 sentence summary of overall contract analysis"
 }`;
 
-        console.log('Calling OpenAI for simplified clause analysis...');
+        console.log('Calling Anthropic for simplified clause analysis...');
         console.log('Simplified prompt length:', simplifiedPrompt.length);
         console.log('Contract text length:', trimmed.length);
 
         const startTime = Date.now();
 
-        const playbookResult = await generateText({
-          model: openai('gpt-4o'),
-          prompt: simplifiedPrompt,
+        const playbookResult = await anthropic.messages.create({
+          model: "claude-sonnet-4-5",
+          max_tokens: 8000,
           temperature: 0.3,
-          maxTokens: 8000,
-          maxRetries: 1,
+          messages: [{ role: "user", content: simplifiedPrompt }],
         });
 
         const endTime = Date.now();
         const duration = ((endTime - startTime) / 1000).toFixed(2);
         console.log(`Simplified clause analysis completed in ${duration} seconds`);
 
-        let cleanedPlaybookText = playbookResult.text.trim();
+        let cleanedPlaybookText = playbookResult.content[0].text.trim();
         if (cleanedPlaybookText.startsWith("```json")) {
           cleanedPlaybookText = cleanedPlaybookText.slice(7);
         } else if (cleanedPlaybookText.startsWith("```")) {
@@ -470,7 +448,7 @@ Return ONLY valid JSON:
       } else if (analysisError.name === 'AbortError' || analysisError.message?.includes('timeout')) {
         console.log("This is a timeout error. The clause analysis took too long.");
       } else if (analysisError.message?.includes('rate limit')) {
-        console.log("This is a rate limit error. Too many requests to OpenAI API.");
+        console.log("This is a rate limit error. Too many requests to Anthropic API.");
       }
 
       console.log("Continuing with basic analysis only (no detailed clause analysis)");

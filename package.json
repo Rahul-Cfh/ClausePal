@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.83",
+    "@anthropic-ai/sdk": "^0.100.1",
     "@hookform/resolvers": "^3.9.0",
     "@next/swc-wasm-nodejs": "13.5.1",
     "@radix-ui/react-accordion": "^1.2.0",
