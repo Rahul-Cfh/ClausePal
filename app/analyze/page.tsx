@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Download, Upload } from "lucide-react";
+import { ArrowLeft, Download, Upload, Send } from "lucide-react";
 import { QuickDecisionDashboard } from "@/components/QuickDecisionDashboard";
 import { ClauseAnalysis } from "@/components/ClauseAnalysis";
 import { OnboardingModal, type UserContext } from "@/components/OnboardingModal";
@@ -79,6 +79,62 @@ export default function AnalyzePage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  type ChatMessage = { role: 'user' | 'assistant'; content: string };
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
+
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || chatLoading || !result) return;
+    const userMsg: ChatMessage = { role: 'user', content: text.trim() };
+    const history = [...chatMessages, userMsg];
+    setChatMessages([...history, { role: 'assistant', content: '' }]);
+    setChatInput('');
+    setChatLoading(true);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: text.trim(),
+          contractText,
+          analysisResult: result,
+          userContext,
+          chatHistory: history,
+        }),
+      });
+      if (!res.ok || !res.body) throw new Error('Chat request failed');
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        setChatMessages(prev => {
+          const msgs = [...prev];
+          msgs[msgs.length - 1] = {
+            role: 'assistant',
+            content: msgs[msgs.length - 1].content + chunk,
+          };
+          return msgs;
+        });
+      }
+    } catch {
+      setChatMessages(prev => {
+        const msgs = [...prev];
+        msgs[msgs.length - 1] = { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' };
+        return msgs;
+      });
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
   useEffect(() => {
     const stored = localStorage.getItem('clausepal_context');
@@ -218,6 +274,19 @@ export default function AnalyzePage() {
       setLoading(false);
     }
   };
+
+  const mostCriticalClause =
+    result?.playbookComparison?.clauseAnalysis?.find((c) => c.risk === 'critical') ??
+    result?.playbookComparison?.clauseAnalysis?.[0];
+
+  const suggestedQuestions = [
+    "Should I sign this?",
+    "What's the biggest risk?",
+    "What should I negotiate first?",
+    mostCriticalClause
+      ? `Explain the "${mostCriticalClause.clauseTitle}" clause in simple terms`
+      : "Explain the most important clause in simple terms",
+  ];
 
   const downloadResults = () => {
     if (!result) return;
@@ -504,8 +573,15 @@ legal advice. For important decisions, please speak to a qualified lawyer.
           </div>
         )}
 
-        {result && (
-          <div className="mt-8 space-y-6">
+        </div>
+      </div>
+
+      {result && (
+        <div className="max-w-[1400px] mx-auto px-4 pb-12">
+          <div className="flex gap-6 items-start">
+            {/* ── Analysis column ── */}
+            <div className="flex-1 min-w-0 space-y-6">
+          <div className="mt-0 space-y-6">
             {result.playbookComparison &&
              result.playbookComparison.clauseAnalysis &&
              Array.isArray(result.playbookComparison.clauseAnalysis) &&
@@ -650,9 +726,83 @@ legal advice. For important decisions, please speak to a qualified lawyer.
               qualified lawyer.
             </p>
           </div>
-        )}
+          </div>
+
+          {/* ── Chat column ── */}
+          <div className="w-[380px] flex-shrink-0 sticky top-6 rounded-xl border border-slate-700 bg-slate-900 flex flex-col overflow-hidden" style={{ height: '620px' }}>
+            <div className="px-4 py-3 border-b border-slate-700 flex-shrink-0">
+              <h3 className="text-sm font-semibold text-slate-100">Chat with your contract</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Ask anything about this contract</p>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
+              {chatMessages.length === 0 ? (
+                <div className="space-y-2 pt-1">
+                  <p className="text-xs text-slate-500 mb-3">Suggested questions:</p>
+                  {suggestedQuestions.map((q, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => sendMessage(q)}
+                      disabled={chatLoading}
+                      className="w-full text-left text-xs text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-3 py-2 transition-colors disabled:opacity-50"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                chatMessages.map((msg, i) => (
+                  <div
+                    key={i}
+                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap ${
+                        msg.role === 'user'
+                          ? 'bg-emerald-500 text-slate-900 font-medium'
+                          : 'bg-slate-800 text-slate-200'
+                      }`}
+                    >
+                      {msg.content ||
+                        (chatLoading && i === chatMessages.length - 1 ? (
+                          <span className="text-slate-500 animate-pulse">▋</span>
+                        ) : null)}
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Input */}
+            <div className="px-3 py-3 border-t border-slate-700 flex-shrink-0">
+              <form
+                onSubmit={(e) => { e.preventDefault(); sendMessage(chatInput); }}
+                className="flex gap-2"
+              >
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Ask about this contract..."
+                  disabled={chatLoading}
+                  className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 disabled:opacity-50 transition-colors"
+                />
+                <button
+                  type="submit"
+                  disabled={chatLoading || !chatInput.trim()}
+                  className="rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed p-2 text-slate-900 transition-colors flex-shrink-0"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+      )}
 
     {showOnboarding && (
       <OnboardingModal
