@@ -50,6 +50,8 @@ export default async function handler(req, res) {
     const contractType = body.contractType || "Unknown";
     const country = body.country || "Unknown";
     const userContext = body.userContext || null;
+    const userId = body.userId || null;
+    const accessToken = body.accessToken || null;
 
     if (!contractText) {
       console.log("ERROR: No contract text received");
@@ -353,10 +355,22 @@ Return ONLY valid JSON:
     "lowRisk": number,
     "mediumRisk": number,
     "highRisk": number,
-    "criticalRisk": number
+    "criticalRisk": number,
+    "favourabilityScore": number,
+    "counterpartyTrustScore": number,
+    "dealScore": number,
+    "verdict": "SIGN" | "NEGOTIATE" | "WALK AWAY",
+    "verdictReason": string
   },
   "summary": "2-3 sentence summary of overall contract analysis"
-}`;
+}
+
+SCORECARD INSTRUCTIONS (for overallScore fields):
+- favourabilityScore (0-100): How favorable are the analyzed clauses for the user overall? 100 = every term strongly protects the user, 0 = every term is against the user's interest.
+- counterpartyTrustScore (0-100): How fair and standard is the other side's drafting? 100 = industry-standard, balanced, reasonable. 0 = extremely one-sided, aggressive, or unusual clauses throughout.
+- dealScore (0-100): Weighted composite — (favourabilityScore × 0.5) + (counterpartyTrustScore × 0.3) + (averageFavourability × 10 × 0.2). Round to nearest integer.
+- verdict: "SIGN" if dealScore >= 70, "NEGOTIATE" if dealScore 40–69, "WALK AWAY" if dealScore < 40.
+- verdictReason: One plain-English sentence explaining the verdict (e.g. "The payment terms are fair but the IP assignment clause is unusually broad and should be negotiated.").`;
 
         console.log('Calling Anthropic for simplified clause analysis...');
         console.log('Simplified prompt length:', simplifiedPrompt.length);
@@ -465,6 +479,27 @@ Return ONLY valid JSON:
           playbookComparison.overallScore.criticalRisk = riskCounts.critical;
           playbookComparison.overallScore.averageFavourability = actualClauseCount > 0 ? totalFavourability / actualClauseCount : 0;
 
+          // Fallback: compute scorecard fields if Claude didn't return them
+          const healthScore = Math.round(playbookComparison.overallScore.averageFavourability * 10);
+          if (!playbookComparison.overallScore.favourabilityScore) {
+            playbookComparison.overallScore.favourabilityScore = healthScore;
+          }
+          if (!playbookComparison.overallScore.counterpartyTrustScore) {
+            playbookComparison.overallScore.counterpartyTrustScore = healthScore;
+          }
+          if (!playbookComparison.overallScore.dealScore) {
+            const fav = playbookComparison.overallScore.favourabilityScore;
+            const trust = playbookComparison.overallScore.counterpartyTrustScore;
+            playbookComparison.overallScore.dealScore = Math.round(fav * 0.5 + trust * 0.3 + healthScore * 0.2);
+          }
+          if (!playbookComparison.overallScore.verdict) {
+            const ds = playbookComparison.overallScore.dealScore;
+            playbookComparison.overallScore.verdict = ds >= 70 ? 'SIGN' : ds >= 40 ? 'NEGOTIATE' : 'WALK AWAY';
+          }
+          if (!playbookComparison.overallScore.verdictReason) {
+            playbookComparison.overallScore.verdictReason = 'Based on overall contract analysis.';
+          }
+
           console.log("Calculated overallScore:", playbookComparison.overallScore);
         }
     } catch (analysisError) {
@@ -489,7 +524,31 @@ Return ONLY valid JSON:
       playbookComparison: playbookComparison
     };
 
-    console.log("Step 10: Sending success response to client");
+    if (userId && accessToken) {
+      try {
+        const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+          global: { headers: { Authorization: `Bearer ${accessToken}` } },
+        });
+        const contractName =
+          contractText.length > 50
+            ? contractText.slice(0, 50).trim() + "..."
+            : contractText.trim();
+        await supabaseUser.from("saved_contracts").insert({
+          user_id: userId,
+          contract_name: contractName,
+          contract_type: contractType,
+          country: country,
+          analysis_result: responseData,
+          deal_score: playbookComparison?.overallScore?.dealScore ?? null,
+          verdict: playbookComparison?.overallScore?.verdict ?? null,
+        });
+        console.log("Step 10: Contract saved to history ✓");
+      } catch (saveError) {
+        console.log("Save to history failed (non-critical):", saveError.message);
+      }
+    }
+
+    console.log("Step 11: Sending success response to client");
     console.log("Response includes playbookComparison:", !!playbookComparison);
     if (playbookComparison) {
       console.log("PlaybookComparison totalClauses:", playbookComparison.overallScore?.totalClauses);

@@ -77,18 +77,20 @@ export function OnboardingModal({ initialContext, onComplete }: OnboardingModalP
       sessionId = crypto.randomUUID();
       localStorage.setItem('clausepal_session_id', sessionId);
     }
-    supabase.from('user_context').upsert(
-      {
-        session_id: sessionId,
-        role: form.role,
-        company_name: form.companyName,
-        industry: form.industry,
-        main_concern: form.mainConcern,
-        jurisdiction: form.jurisdiction,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'session_id' }
-    ).then(() => {}).catch(() => {});
+    void Promise.resolve(
+      supabase.from('user_context').upsert(
+        {
+          session_id: sessionId,
+          role: form.role,
+          company_name: form.companyName,
+          industry: form.industry,
+          main_concern: form.mainConcern,
+          jurisdiction: form.jurisdiction,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'session_id' }
+      )
+    ).catch(() => {});
 
     onComplete(form);
   };

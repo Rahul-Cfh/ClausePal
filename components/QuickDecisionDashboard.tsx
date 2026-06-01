@@ -1,8 +1,6 @@
 'use client';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, AlertCircle, AlertTriangle, XCircle } from 'lucide-react';
 
 interface ClauseItem {
   clauseNumber?: string;
@@ -23,6 +21,11 @@ interface OverallScore {
   criticalRisk: number;
   playbookMatchedClauses?: number;
   noPlaybookMatchClauses?: number;
+  favourabilityScore?: number;
+  counterpartyTrustScore?: number;
+  dealScore?: number;
+  verdict?: 'SIGN' | 'NEGOTIATE' | 'WALK AWAY';
+  verdictReason?: string;
 }
 
 interface QuickDecisionDashboardProps {
@@ -31,164 +34,166 @@ interface QuickDecisionDashboardProps {
   summary: string;
 }
 
+function ScoreBox({ label, score }: { label: string; score: number }) {
+  const color =
+    score >= 70 ? 'bg-emerald-500' : score >= 40 ? 'bg-amber-500' : 'bg-red-500';
+  const textColor =
+    score >= 70 ? 'text-emerald-400' : score >= 40 ? 'text-amber-400' : 'text-red-400';
+
+  return (
+    <div className="flex-1 bg-slate-800 rounded-xl p-4 flex flex-col gap-3">
+      <div className={`text-3xl font-bold ${textColor}`}>{score}</div>
+      <div className="w-full bg-slate-700 rounded-full h-1.5">
+        <div
+          className={`h-1.5 rounded-full ${color} transition-all`}
+          style={{ width: `${score}%` }}
+        />
+      </div>
+      <div className="text-xs text-slate-400 font-medium uppercase tracking-wide">{label}</div>
+    </div>
+  );
+}
+
+const VERDICT_CONFIG = {
+  'SIGN': {
+    label: 'SIGN ✓',
+    bg: 'bg-emerald-500/15 border-emerald-500/40',
+    text: 'text-emerald-400',
+    dot: 'bg-emerald-500',
+  },
+  'NEGOTIATE': {
+    label: 'NEGOTIATE ⚠',
+    bg: 'bg-amber-500/15 border-amber-500/40',
+    text: 'text-amber-400',
+    dot: 'bg-amber-500',
+  },
+  'WALK AWAY': {
+    label: 'WALK AWAY ✗',
+    bg: 'bg-red-500/15 border-red-500/40',
+    text: 'text-red-400',
+    dot: 'bg-red-500',
+  },
+} as const;
+
 export function QuickDecisionDashboard({ clauses, overallScore, summary }: QuickDecisionDashboardProps) {
   const healthScore = Math.round(overallScore.averageFavourability * 10);
+  const favourabilityScore = overallScore.favourabilityScore ?? healthScore;
+  const counterpartyTrustScore = overallScore.counterpartyTrustScore ?? healthScore;
+  const dealScore = overallScore.dealScore ?? Math.round(favourabilityScore * 0.5 + counterpartyTrustScore * 0.3 + healthScore * 0.2);
+  const verdict = overallScore.verdict ?? (dealScore >= 70 ? 'SIGN' : dealScore >= 40 ? 'NEGOTIATE' : 'WALK AWAY');
+  const verdictReason = overallScore.verdictReason ?? 'Based on overall contract analysis.';
 
-  const getHealthColor = (score: number) => {
-    if (score >= 70) return 'text-green-600';
-    if (score >= 50) return 'text-blue-600';
-    if (score >= 30) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  const getHealthBgColor = (score: number) => {
-    if (score >= 70) return 'bg-green-50 border-green-200';
-    if (score >= 50) return 'bg-blue-50 border-blue-200';
-    if (score >= 30) return 'bg-yellow-50 border-yellow-200';
-    return 'bg-red-50 border-red-200';
-  };
-
-  const getHealthLabel = (score: number) => {
-    if (score >= 70) return 'Strong Position';
-    if (score >= 50) return 'Generally Favorable';
-    if (score >= 30) return 'Review Recommended';
-    return 'Significant Concerns';
-  };
-
-  const getFavourabilityColor = (percentage: number) => {
-    if (percentage >= 70) return 'bg-green-500';
-    if (percentage >= 40) return 'bg-yellow-500';
-    return 'bg-red-500';
-  };
-
-  const getFavourabilityTextColor = (percentage: number) => {
-    if (percentage >= 70) return 'text-green-700';
-    if (percentage >= 40) return 'text-yellow-700';
-    return 'text-red-700';
-  };
+  const vc = VERDICT_CONFIG[verdict];
 
   const getRiskBadge = (risk: string) => {
-    const badges = {
-      low: <Badge className="bg-green-100 text-green-800 border-green-300">Low</Badge>,
-      medium: <Badge className="bg-blue-100 text-blue-800 border-blue-300">Medium</Badge>,
-      high: <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">High</Badge>,
-      critical: <Badge className="bg-red-100 text-red-800 border-red-300">Critical</Badge>,
+    const styles: Record<string, string> = {
+      low: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+      medium: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+      high: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+      critical: 'bg-red-500/20 text-red-400 border-red-500/30',
     };
-    return badges[risk as keyof typeof badges] || badges.low;
+    const labels: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical' };
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${styles[risk] ?? styles.medium}`}>
+        {labels[risk] ?? risk}
+      </span>
+    );
   };
 
   const getDeviationBadge = (deviation: string) => {
-    const badges = {
-      low: <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">Low</Badge>,
-      medium: <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">Medium</Badge>,
-      high: <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">High</Badge>,
-      unacceptable: <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">Unacceptable</Badge>,
-      no_playbook: <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-300">No Playbook</Badge>,
+    if (deviation === 'no_playbook') return null;
+    const styles: Record<string, string> = {
+      none: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+      minor: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+      moderate: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+      major: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+      critical: 'bg-red-500/20 text-red-400 border-red-500/30',
+      no_match: 'bg-slate-500/20 text-slate-500 border-slate-600/30',
     };
-    return badges[deviation as keyof typeof badges] || badges.low;
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${styles[deviation] ?? styles.minor}`}>
+        {deviation.replace('_', ' ')}
+      </span>
+    );
   };
 
+  const barColor = (pct: number) =>
+    pct >= 70 ? 'bg-emerald-500' : pct >= 40 ? 'bg-amber-500' : 'bg-red-500';
+
+  const pctTextColor = (pct: number) =>
+    pct >= 70 ? 'text-emerald-400' : pct >= 40 ? 'text-amber-400' : 'text-red-400';
+
   return (
-    <Card className={`border-2 ${getHealthBgColor(healthScore)} bg-white text-gray-900`}>
-      <CardHeader>
-        <CardTitle className="text-2xl text-gray-900">Quick Decision Dashboard</CardTitle>
-        <CardDescription className="text-base text-gray-600">
-          Analysis of key contract clauses for faster decision making
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-medium text-gray-600 mb-1">Contract Health Score</div>
-            <div className={`text-5xl font-bold ${getHealthColor(healthScore)}`}>
-              {healthScore}%
-            </div>
-            <div className={`text-sm font-semibold mt-1 ${getHealthColor(healthScore)}`}>
-              {getHealthLabel(healthScore)}
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-sm font-medium text-gray-600 mb-2">Clauses Analyzed</div>
-            <div className="text-3xl font-bold text-gray-900">{overallScore.totalClauses}</div>
-            <div className="text-xs text-gray-500 mt-1">Avg Score: {overallScore.averageFavourability.toFixed(1)}/10</div>
-            {(overallScore.playbookMatchedClauses !== undefined || overallScore.noPlaybookMatchClauses !== undefined) && (
-              <div className="text-xs text-gray-500 mt-1">
-                {overallScore.playbookMatchedClauses || 0} playbook matched • {overallScore.noPlaybookMatchClauses || 0} unmatched
-              </div>
-            )}
-          </div>
+    <div className="rounded-xl border border-slate-700 bg-slate-900 overflow-hidden">
+      {/* Verdict banner */}
+      <div className={`border-b border-slate-700 px-6 py-5 ${vc.bg}`}>
+        <div className={`text-3xl font-bold tracking-wide mb-1 ${vc.text}`}>
+          {vc.label}
         </div>
+        <p className="text-sm text-slate-300 leading-relaxed">{verdictReason}</p>
+      </div>
 
-        <div className="pt-4 border-t border-gray-200">
-          <h4 className="font-semibold text-sm mb-3 text-gray-900">Clause-by-Clause Analysis</h4>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-2 px-2 font-semibold text-gray-700">Clause</th>
-                  <th className="text-left py-2 px-2 font-semibold text-gray-700 w-64">Favourability</th>
-                  <th className="text-center py-2 px-2 font-semibold text-gray-700">Risk</th>
-                  <th className="text-center py-2 px-2 font-semibold text-gray-700">Deviation</th>
-                </tr>
-              </thead>
-              <tbody>
-                {clauses.map((clause, index) => (
-                  <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-2 font-medium text-gray-900">
-                      <div className="flex items-center gap-2">
-                        {clause.clauseNumber && (
-                          <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                            {clause.clauseNumber}
-                          </span>
-                        )}
-                        <span>{clause.clauseTitle}</span>
-                      </div>
-                      {clause.playbookMatchFound === false && (
-                        <span className="text-xs text-gray-500 italic">No playbook match</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-2">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-gray-200 rounded-full h-4 overflow-hidden">
-                          <div
-                            className={`h-full ${getFavourabilityColor(clause.favourabilityPercentage)} transition-all`}
-                            style={{ width: `${clause.favourabilityPercentage}%` }}
-                          ></div>
-                        </div>
-                        <span className={`text-xs font-semibold w-12 text-right ${getFavourabilityTextColor(clause.favourabilityPercentage)}`}>
-                          {clause.favourabilityPercentage}%
+      {/* Three score boxes */}
+      <div className="px-6 py-5 flex gap-4 border-b border-slate-700">
+        <ScoreBox label="Favourability" score={favourabilityScore} />
+        <ScoreBox label="Counterparty Trust" score={counterpartyTrustScore} />
+        <ScoreBox label="Deal Score" score={dealScore} />
+      </div>
+
+      {/* Clause table */}
+      <div className="px-6 py-5">
+        <h4 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide">
+          Clause Breakdown
+        </h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-700/60">
+                <th className="text-left py-2 px-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">Clause</th>
+                <th className="text-left py-2 px-2 text-xs font-semibold text-slate-500 uppercase tracking-wide w-52">Favourability</th>
+                <th className="text-center py-2 px-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">Risk</th>
+                <th className="text-center py-2 px-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">Deviation</th>
+              </tr>
+            </thead>
+            <tbody>
+              {clauses.map((clause, index) => (
+                <tr key={index} className="border-b border-slate-800 hover:bg-slate-800/40">
+                  <td className="py-3 px-2 text-slate-200 font-medium">
+                    <div className="flex items-center gap-2">
+                      {clause.clauseNumber && (
+                        <span className="text-xs text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded font-mono">
+                          {clause.clauseNumber}
                         </span>
+                      )}
+                      <span>{clause.clauseTitle}</span>
+                    </div>
+                  </td>
+                  <td className="py-3 px-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className={`h-full ${barColor(clause.favourabilityPercentage)} transition-all`}
+                          style={{ width: `${clause.favourabilityPercentage}%` }}
+                        />
                       </div>
-                    </td>
-                    <td className="py-3 px-2 text-center">{getRiskBadge(clause.risk)}</td>
-                    <td className="py-3 px-2 text-center">{getDeviationBadge(clause.deviation)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      <span className={`text-xs font-semibold w-9 text-right tabular-nums ${pctTextColor(clause.favourabilityPercentage)}`}>
+                        {clause.favourabilityPercentage}%
+                      </span>
+                    </div>
+                  </td>
+                  <td className="py-3 px-2 text-center">{getRiskBadge(clause.risk)}</td>
+                  <td className="py-3 px-2 text-center">{getDeviationBadge(clause.deviation)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+      </div>
 
-        <div className="pt-4 border-t border-gray-200">
-          <h4 className="font-semibold text-sm mb-2 text-gray-900">Summary</h4>
-          <p className="text-sm text-gray-700 leading-relaxed">{summary}</p>
-        </div>
-
-        {overallScore.criticalRisk > 0 && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <XCircle className="w-5 h-5 text-red-600 mt-0.5" />
-              <div>
-                <h4 className="font-semibold text-red-900 text-sm mb-1">Action Required</h4>
-                <p className="text-sm text-red-800">
-                  This contract has {overallScore.criticalRisk} critical risk{overallScore.criticalRisk !== 1 ? 's' : ''} that require immediate attention.
-                  Review the clause-by-clause analysis below before proceeding.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      {/* Summary */}
+      <div className="px-6 pb-5 border-t border-slate-700/60 pt-4">
+        <p className="text-sm text-slate-400 leading-relaxed">{summary}</p>
+      </div>
+    </div>
   );
 }

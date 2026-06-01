@@ -7,6 +7,7 @@ import { ArrowLeft, Download, Upload } from "lucide-react";
 import { QuickDecisionDashboard } from "@/components/QuickDecisionDashboard";
 import { ClauseAnalysis } from "@/components/ClauseAnalysis";
 import { OnboardingModal, type UserContext } from "@/components/OnboardingModal";
+import { supabase } from "@/lib/supabase";
 
 type ClauseAnalysisItem = {
   clauseTitle: string;
@@ -75,6 +76,9 @@ export default function AnalyzePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [userContext, setUserContext] = useState<UserContext | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('clausepal_context');
@@ -87,6 +91,22 @@ export default function AnalyzePage() {
     } else {
       setShowOnboarding(true);
     }
+  }, []);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setUserId(session.user.id);
+        setAccessToken(session.access_token);
+        setUserEmail(session.user.email ?? null);
+      }
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user.id ?? null);
+      setAccessToken(session?.access_token ?? null);
+      setUserEmail(session?.user.email ?? null);
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,6 +175,8 @@ export default function AnalyzePage() {
           contractType,
           country,
           userContext,
+          userId,
+          accessToken,
         }),
       });
 
@@ -325,21 +347,49 @@ legal advice. For important decisions, please speak to a qualified lawyer.
             Back to Home
           </Link>
 
-          <Link href="/" className="flex items-center gap-3 group">
-            <Image
-              src="/screenshot_2025-12-11_at_4.57.19_am.png"
-              alt="LegalLens Logo"
-              width={50}
-              height={50}
-              className="transition-transform group-hover:scale-105"
-            />
-            <div className="text-right">
-              <div className="text-xl font-bold font-[family-name:var(--font-orbitron)] tracking-wider">LegalLens</div>
-              <div className="text-xs text-cyan-400" style={{ textShadow: '0 0 8px rgba(34, 211, 238, 0.6), 0 0 16px rgba(34, 211, 238, 0.4), 0 0 24px rgba(34, 211, 238, 0.2)' }}>
-                Deciphering the fine print.
+          <div className="flex items-center gap-4">
+            {userId && (
+              <Link
+                href="/history"
+                className="text-sm text-slate-400 hover:text-slate-200 transition-colors"
+              >
+                History
+              </Link>
+            )}
+            {userId ? (
+              <button
+                type="button"
+                onClick={() => supabase.auth.signOut()}
+                className="text-sm text-slate-400 hover:text-slate-200 transition-colors"
+                title={userEmail ?? undefined}
+              >
+                Sign Out
+              </button>
+            ) : (
+              <Link
+                href="/auth"
+                className="text-sm text-emerald-500 hover:text-emerald-400 transition-colors"
+              >
+                Sign In
+              </Link>
+            )}
+
+            <Link href="/" className="flex items-center gap-3 group">
+              <Image
+                src="/screenshot_2025-12-11_at_4.57.19_am.png"
+                alt="LegalLens Logo"
+                width={50}
+                height={50}
+                className="transition-transform group-hover:scale-105"
+              />
+              <div className="text-right">
+                <div className="text-xl font-bold font-[family-name:var(--font-orbitron)] tracking-wider">LegalLens</div>
+                <div className="text-xs text-cyan-400" style={{ textShadow: '0 0 8px rgba(34, 211, 238, 0.6), 0 0 16px rgba(34, 211, 238, 0.4), 0 0 24px rgba(34, 211, 238, 0.2)' }}>
+                  Deciphering the fine print.
+                </div>
               </div>
-            </div>
-          </Link>
+            </Link>
+          </div>
         </div>
 
         <h1 className="text-3xl font-semibold mb-2">Analyze your contract</h1>
