@@ -1,16 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { CheckCircle2, AlertCircle, AlertTriangle, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface NegotiationStrategy {
   counterpartyArgument: string;
   negotiationResponse: string;
-  strategyType: 'soft pushback' | 'risk framing' | 'commercial tradeoff' | 'fallback position' | 'escalation trigger';
+  strategyType: string;
 }
 
 interface ClauseAnalysisItem {
@@ -26,296 +23,272 @@ interface ClauseAnalysisItem {
   mitigation?: string[];
   recommendedEdit?: string;
   counterargumentsAndNegotiationStrategies?: NegotiationStrategy[];
-  deviation?: 'low' | 'medium' | 'high' | 'unacceptable' | 'no_playbook';
+  deviation?: string;
   favourabilityScore: number;
   favourabilityPercentage: number;
   risk: 'low' | 'medium' | 'high' | 'critical';
 }
 
-interface ClauseAnalysisProps {
-  clauses: ClauseAnalysisItem[];
-}
+const RISK_CONFIG = {
+  low:      { icon: CheckCircle2,  iconColor: 'text-emerald-500', badge: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', border: 'border-l-emerald-500'  },
+  medium:   { icon: AlertCircle,   iconColor: 'text-amber-500',   badge: 'bg-amber-500/20 text-amber-400 border-amber-500/30',       border: 'border-l-amber-500'    },
+  high:     { icon: AlertTriangle, iconColor: 'text-orange-500',  badge: 'bg-orange-500/20 text-orange-400 border-orange-500/30',    border: 'border-l-orange-500'   },
+  critical: { icon: XCircle,       iconColor: 'text-red-500',     badge: 'bg-red-500/20 text-red-400 border-red-500/30',             border: 'border-l-red-500'      },
+} as const;
 
-export function ClauseAnalysis({ clauses }: ClauseAnalysisProps) {
-  const [filter, setFilter] = useState<string>('all');
+const STRATEGY_STYLE: Record<string, string> = {
+  'soft pushback':       'bg-blue-500/15 text-blue-400 border-blue-500/30',
+  'risk framing':        'bg-orange-500/15 text-orange-400 border-orange-500/30',
+  'commercial tradeoff': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  'fallback position':   'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  'escalation trigger':  'bg-red-500/15 text-red-400 border-red-500/30',
+};
+
+const FILTER_OPTIONS = ['all', 'low', 'medium', 'high', 'critical'] as const;
+type FilterOption = typeof FILTER_OPTIONS[number];
+
+export function ClauseAnalysis({ clauses }: { clauses: ClauseAnalysisItem[] }) {
+  const [filter, setFilter] = useState<FilterOption>('all');
   const [expandedClauses, setExpandedClauses] = useState<Set<number>>(new Set());
 
-  const toggleClause = (index: number) => {
-    const newExpanded = new Set(expandedClauses);
-    if (newExpanded.has(index)) {
-      newExpanded.delete(index);
-    } else {
-      newExpanded.add(index);
-    }
-    setExpandedClauses(newExpanded);
+  const toggle = (idx: number) => {
+    setExpandedClauses(prev => {
+      const next = new Set(prev);
+      next.has(idx) ? next.delete(idx) : next.add(idx);
+      return next;
+    });
   };
 
-  const getRiskIcon = (risk: string) => {
-    switch (risk) {
-      case 'low':
-        return <CheckCircle2 className="w-5 h-5 text-green-600" />;
-      case 'medium':
-        return <AlertCircle className="w-5 h-5 text-blue-600" />;
-      case 'high':
-        return <AlertTriangle className="w-5 h-5 text-yellow-600" />;
-      case 'critical':
-        return <XCircle className="w-5 h-5 text-red-600" />;
-      default:
-        return null;
-    }
+  const counts = {
+    all:      clauses.length,
+    low:      clauses.filter(c => c.risk === 'low').length,
+    medium:   clauses.filter(c => c.risk === 'medium').length,
+    high:     clauses.filter(c => c.risk === 'high').length,
+    critical: clauses.filter(c => c.risk === 'critical').length,
   };
 
-  const getRiskBadge = (risk: string, score: number) => {
-    const scoreDisplay = `${score}/10`;
-    switch (risk) {
-      case 'low':
-        return <Badge className="bg-green-100 text-green-800 border-green-300">Low Risk • {scoreDisplay}</Badge>;
-      case 'medium':
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-300">Medium Risk • {scoreDisplay}</Badge>;
-      case 'high':
-        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">High Risk • {scoreDisplay}</Badge>;
-      case 'critical':
-        return <Badge className="bg-red-100 text-red-800 border-red-300">Critical • {scoreDisplay}</Badge>;
-      default:
-        return null;
-    }
+  const filtered = filter === 'all' ? clauses : clauses.filter(c => c.risk === filter);
+
+  const filterLabel: Record<FilterOption, string> = {
+    all:      `All (${counts.all})`,
+    low:      `Low (${counts.low})`,
+    medium:   `Medium (${counts.medium})`,
+    high:     `High (${counts.high})`,
+    critical: `Critical (${counts.critical})`,
   };
 
-  const getCardBorderColor = (risk: string) => {
-    switch (risk) {
-      case 'low':
-        return 'border-l-4 border-l-green-500';
-      case 'medium':
-        return 'border-l-4 border-l-blue-500';
-      case 'high':
-        return 'border-l-4 border-l-yellow-500';
-      case 'critical':
-        return 'border-l-4 border-l-red-500';
-      default:
-        return '';
-    }
+  const filterStyle = (f: FilterOption): string => {
+    if (filter !== f) return 'border border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-300';
+    const active: Record<FilterOption, string> = {
+      all:      'bg-slate-700 text-slate-100 border border-slate-600',
+      low:      'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40',
+      medium:   'bg-amber-500/20 text-amber-400 border border-amber-500/40',
+      high:     'bg-orange-500/20 text-orange-400 border border-orange-500/40',
+      critical: 'bg-red-500/20 text-red-400 border border-red-500/40',
+    };
+    return active[f];
   };
-
-  const getStrategyTypeBadge = (strategyType: string) => {
-    switch (strategyType) {
-      case 'soft pushback':
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-300 text-xs">Soft Pushback</Badge>;
-      case 'risk framing':
-        return <Badge className="bg-orange-100 text-orange-800 border-orange-300 text-xs">Risk Framing</Badge>;
-      case 'commercial tradeoff':
-        return <Badge className="bg-green-100 text-green-800 border-green-300 text-xs">Commercial Tradeoff</Badge>;
-      case 'fallback position':
-        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300 text-xs">Fallback Position</Badge>;
-      case 'escalation trigger':
-        return <Badge className="bg-red-100 text-red-800 border-red-300 text-xs">Escalation Trigger</Badge>;
-      default:
-        return null;
-    }
-  };
-
-  const filteredClauses = clauses.filter(clause => {
-    if (filter === 'all') return true;
-    return clause.risk === filter;
-  });
 
   return (
-    <Card className="bg-white text-gray-900">
-      <CardHeader>
-        <CardTitle className="text-2xl text-gray-900">Clause-by-Clause Analysis</CardTitle>
-        <CardDescription className="text-base text-gray-600">
-          Detailed analysis of the most critical clauses in your contract
-        </CardDescription>
-        <div className="flex flex-wrap gap-2 pt-4">
-          <Button
-            variant={filter === 'all' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setFilter('all')}
+    <div className="space-y-4">
+      {/* Filter bar */}
+      <div className="flex flex-wrap gap-2">
+        {FILTER_OPTIONS.map(f => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => setFilter(f)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${filterStyle(f)}`}
           >
-            All ({clauses.length})
-          </Button>
-          <Button
-            variant={filter === 'low' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setFilter('low')}
-            className="gap-1"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            Low Risk ({clauses.filter(c => c.risk === 'low').length})
-          </Button>
-          <Button
-            variant={filter === 'medium' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setFilter('medium')}
-            className="gap-1"
-          >
-            <AlertCircle className="w-4 h-4" />
-            Medium Risk ({clauses.filter(c => c.risk === 'medium').length})
-          </Button>
-          <Button
-            variant={filter === 'high' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setFilter('high')}
-            className="gap-1"
-          >
-            <AlertTriangle className="w-4 h-4" />
-            High Risk ({clauses.filter(c => c.risk === 'high').length})
-          </Button>
-          <Button
-            variant={filter === 'critical' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setFilter('critical')}
-            className="gap-1"
-          >
-            <XCircle className="w-4 h-4" />
-            Critical ({clauses.filter(c => c.risk === 'critical').length})
-          </Button>
+            {filterLabel[f]}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="py-10 text-center text-slate-500 text-sm">
+          No clauses match this filter.
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {filteredClauses.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            No clauses found for this filter.
-          </div>
-        ) : (
-          filteredClauses.map((clause, index) => (
-            <Card key={index} className={`${getCardBorderColor(clause.risk)} bg-white text-gray-900`}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3 flex-1">
-                    {getRiskIcon(clause.risk)}
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        {clause.clauseNumber && (
-                          <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                            {clause.clauseNumber}
-                          </span>
-                        )}
-                        <CardTitle className="text-lg text-gray-900">{clause.clauseTitle}</CardTitle>
+      ) : (
+        filtered.map((clause, index) => {
+          const cfg = RISK_CONFIG[clause.risk] ?? RISK_CONFIG.medium;
+          const Icon = cfg.icon;
+          const isOpen = expandedClauses.has(index);
+
+          return (
+            <div
+              key={index}
+              className={`rounded-xl border border-slate-800 bg-slate-900 border-l-4 ${cfg.border} overflow-hidden`}
+            >
+              {/* Header — always visible */}
+              <button
+                type="button"
+                onClick={() => toggle(index)}
+                className="w-full text-left px-4 py-4 flex items-center gap-3 hover:bg-slate-800/40 transition-colors"
+              >
+                <Icon className={`w-5 h-5 flex-shrink-0 ${cfg.iconColor}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {clause.clauseNumber && (
+                      <span className="text-xs text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded font-mono">
+                        {clause.clauseNumber}
+                      </span>
+                    )}
+                    <span className="font-semibold text-slate-100">{clause.clauseTitle}</span>
+                  </div>
+                  {!isOpen && (
+                    <p className="text-sm text-slate-400 mt-0.5 truncate">{clause.summary}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded border ${cfg.badge}`}>
+                    {clause.favourabilityScore}/10
+                  </span>
+                  {isOpen ? (
+                    <ChevronUp className="w-4 h-4 text-slate-500" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-slate-500" />
+                  )}
+                </div>
+              </button>
+
+              {/* Expanded body */}
+              <Collapsible open={isOpen}>
+                <CollapsibleContent>
+                  <div className="px-4 pb-5 space-y-4 border-t border-slate-800 pt-4">
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1.5">Summary</p>
+                      <p className="text-sm text-slate-300 leading-relaxed">{clause.summary}</p>
+                    </div>
+
+                    {clause.issues && clause.issues.length > 0 && (
+                      <div className="rounded-lg bg-red-950/25 border border-red-500/20 p-3">
+                        <p className="text-xs text-red-400 uppercase tracking-wide font-semibold mb-2">Issues Found</p>
+                        <ul className="space-y-1">
+                          {clause.issues.map((issue, i) => (
+                            <li key={i} className="text-sm text-red-300 flex items-start gap-2">
+                              <span className="text-red-600 mt-1 flex-shrink-0">·</span>
+                              {issue}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                      {clause.matchedPlaybookClause && clause.deviation !== 'no_playbook' && (
-                        <p className={`text-xs mt-1 ${clause.playbookMatchFound === false ? 'text-orange-600 font-semibold' : 'text-gray-500'}`}>
-                          Playbook Match: {clause.matchedPlaybookClause}
-                          {clause.playbookMatchFound === false && ' ⚠'}
+                    )}
+
+                    {clause.unacceptablePositions && clause.unacceptablePositions.length > 0 && (
+                      <div className="rounded-lg bg-red-950/40 border-2 border-red-500/40 p-3">
+                        <p className="text-xs text-red-400 uppercase tracking-wide font-semibold mb-2">
+                          ⚠ Unacceptable Positions
                         </p>
-                      )}
-                      {clause.deviation && clause.deviation !== 'no_playbook' && (
-                        <p className="text-xs text-gray-500">Deviation: {clause.deviation.toUpperCase().replace('_', ' ')}</p>
-                      )}
-                    </div>
-                  </div>
-                  {getRiskBadge(clause.risk, clause.favourabilityScore)}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <h4 className="font-semibold text-sm mb-2">Summary</h4>
-                  <p className="text-sm text-gray-700 leading-relaxed">{clause.summary}</p>
-                </div>
+                        <ul className="space-y-1">
+                          {clause.unacceptablePositions.map((pos, i) => (
+                            <li key={i} className="text-sm text-red-300 font-medium flex items-start gap-2">
+                              <span className="text-red-500 mt-1 flex-shrink-0">·</span>
+                              {pos}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
-                {clause.issues && clause.issues.length > 0 && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <h4 className="font-semibold text-sm mb-2 text-red-900">Issues Found</h4>
-                    <ul className="list-disc pl-5 space-y-1">
-                      {clause.issues.map((issue, idx) => (
-                        <li key={idx} className="text-sm text-red-800">{issue}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                    {clause.questions && clause.questions.length > 0 && (
+                      <div className="rounded-lg bg-blue-950/25 border border-blue-500/20 p-3">
+                        <p className="text-xs text-blue-400 uppercase tracking-wide font-semibold mb-2">Questions for Counterparty</p>
+                        <ul className="space-y-1">
+                          {clause.questions.map((q, i) => (
+                            <li key={i} className="text-sm text-blue-300 flex items-start gap-2">
+                              <span className="text-blue-600 mt-1 flex-shrink-0">·</span>
+                              {q}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
-                {clause.unacceptablePositions && clause.unacceptablePositions.length > 0 && (
-                  <div className="p-3 bg-red-100 border-2 border-red-400 rounded-lg">
-                    <h4 className="font-semibold text-sm mb-2 text-red-900">⚠ Unacceptable Positions</h4>
-                    <ul className="list-disc pl-5 space-y-1">
-                      {clause.unacceptablePositions.map((pos, idx) => (
-                        <li key={idx} className="text-sm text-red-900 font-medium">{pos}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                    {clause.mitigation && clause.mitigation.length > 0 && (
+                      <div className="rounded-lg bg-emerald-950/25 border border-emerald-500/20 p-3">
+                        <p className="text-xs text-emerald-400 uppercase tracking-wide font-semibold mb-2">Mitigation Suggestions</p>
+                        <ul className="space-y-1">
+                          {clause.mitigation.map((m, i) => (
+                            <li key={i} className="text-sm text-emerald-300 flex items-start gap-2">
+                              <span className="text-emerald-600 mt-1 flex-shrink-0">·</span>
+                              {m}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
-                {clause.questions && clause.questions.length > 0 && (
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <h4 className="font-semibold text-sm mb-2 text-blue-900">Questions for Counterparty</h4>
-                    <ul className="list-disc pl-5 space-y-1">
-                      {clause.questions.map((question, idx) => (
-                        <li key={idx} className="text-sm text-blue-800">{question}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                    {clause.recommendedEdit && (
+                      <div className="rounded-lg bg-purple-950/25 border border-purple-500/20 p-3">
+                        <p className="text-xs text-purple-400 uppercase tracking-wide font-semibold mb-2">Recommended Language</p>
+                        <p className="text-sm font-mono text-purple-200 leading-relaxed italic">
+                          {clause.recommendedEdit}
+                        </p>
+                      </div>
+                    )}
 
-                {clause.mitigation && clause.mitigation.length > 0 && (
-                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <h4 className="font-semibold text-sm mb-2 text-green-900">Mitigation Suggestions</h4>
-                    <ul className="list-disc pl-5 space-y-1">
-                      {clause.mitigation.map((mit, idx) => (
-                        <li key={idx} className="text-sm text-green-800">{mit}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {clause.recommendedEdit && (
-                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                    <h4 className="font-semibold text-sm mb-2 text-purple-900">Recommended Alternative Language</h4>
-                    <p className="text-sm text-purple-800 italic leading-relaxed">{clause.recommendedEdit}</p>
-                  </div>
-                )}
-
-                {clause.counterargumentsAndNegotiationStrategies && clause.counterargumentsAndNegotiationStrategies.length > 0 && (
-                  <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
-                    <h4 className="font-semibold text-sm mb-3 text-indigo-900">Counterarguments & Negotiation Strategies</h4>
-                    <div className="space-y-3">
-                      {clause.counterargumentsAndNegotiationStrategies.map((strategy, idx) => (
-                        <div key={idx} className="p-3 bg-white border border-indigo-100 rounded-md">
-                          <div className="flex items-start gap-2 mb-2">
-                            {getStrategyTypeBadge(strategy.strategyType)}
-                          </div>
-                          <div className="space-y-2">
-                            <div>
-                              <p className="text-xs font-semibold text-gray-600 mb-1">Their Argument:</p>
-                              <p className="text-sm text-gray-700 italic">"{strategy.counterpartyArgument}"</p>
+                    {clause.counterargumentsAndNegotiationStrategies &&
+                      clause.counterargumentsAndNegotiationStrategies.length > 0 && (
+                      <div className="rounded-lg bg-slate-800/60 border border-slate-700/50 p-3">
+                        <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-3">
+                          Negotiation Strategies
+                        </p>
+                        <div className="space-y-3">
+                          {clause.counterargumentsAndNegotiationStrategies.map((s, i) => (
+                            <div key={i} className="bg-slate-900 rounded-lg p-3 border border-slate-700/50">
+                              <span
+                                className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded border mb-2 ${STRATEGY_STYLE[s.strategyType] ?? 'bg-slate-700 text-slate-400 border-slate-600'}`}
+                              >
+                                {s.strategyType}
+                              </span>
+                              <div className="space-y-2 mt-1">
+                                <div>
+                                  <p className="text-xs text-slate-500 mb-0.5">Their argument:</p>
+                                  <p className="text-sm text-slate-400 italic">
+                                    &ldquo;{s.counterpartyArgument}&rdquo;
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-emerald-500 mb-0.5">Your response:</p>
+                                  <p className="text-sm text-slate-200">{s.negotiationResponse}</p>
+                                </div>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-xs font-semibold text-indigo-700 mb-1">Your Response:</p>
-                              <p className="text-sm text-indigo-900 font-medium">{strategy.negotiationResponse}</p>
-                            </div>
-                          </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      </div>
+                    )}
 
-                <Collapsible open={expandedClauses.has(index)}>
-                  <CollapsibleTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-full justify-between"
-                      onClick={() => toggleClause(index)}
-                    >
-                      <span className="text-xs font-medium">View Contract Text</span>
-                      {expandedClauses.has(index) ? (
-                        <ChevronUp className="w-4 h-4" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4" />
-                      )}
-                    </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-2">
-                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      <h4 className="font-semibold text-xs mb-2 text-gray-700">Contract Language</h4>
-                      <p className="text-xs text-gray-600 leading-relaxed italic">{clause.clauseText}</p>
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </CardContent>
-    </Card>
+                    <Collapsible open={expandedClauses.has(index + 10000)}>
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => toggle(index + 10000)}
+                          className="w-full flex items-center justify-between text-xs text-slate-500 hover:text-slate-400 py-1 transition-colors"
+                        >
+                          <span>View original contract text</span>
+                          {expandedClauses.has(index + 10000)
+                            ? <ChevronUp className="w-3.5 h-3.5" />
+                            : <ChevronDown className="w-3.5 h-3.5" />
+                          }
+                        </button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="mt-2 rounded-lg bg-slate-950 border border-slate-800 p-3">
+                          <p className="text-xs font-mono text-slate-400 leading-relaxed whitespace-pre-wrap">
+                            {clause.clauseText}
+                          </p>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+          );
+        })
+      )}
+    </div>
   );
 }

@@ -7,7 +7,7 @@ interface ClauseItem {
   clauseTitle: string;
   favourabilityPercentage: number;
   risk: 'low' | 'medium' | 'high' | 'critical';
-  deviation: 'low' | 'medium' | 'high' | 'unacceptable' | 'no_playbook';
+  deviation?: string;
   playbookMatchFound?: boolean;
   matchedPlaybookClause?: string;
 }
@@ -182,7 +182,7 @@ export function QuickDecisionDashboard({ clauses, overallScore, summary }: Quick
                     </div>
                   </td>
                   <td className="py-3 px-2 text-center">{getRiskBadge(clause.risk)}</td>
-                  <td className="py-3 px-2 text-center">{getDeviationBadge(clause.deviation)}</td>
+                  <td className="py-3 px-2 text-center">{clause.deviation ? getDeviationBadge(clause.deviation) : null}</td>
                 </tr>
               ))}
             </tbody>
