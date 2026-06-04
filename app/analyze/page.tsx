@@ -1,5 +1,6 @@
 "use client";
 
+import "./analyze.css";
 import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Download, Upload, Send } from "lucide-react";
@@ -276,151 +277,163 @@ export default function AnalyzePage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  const charCount = contractText.length;
+
   return (
     <>
-      {/* ── Header ── */}
-      <header className="sticky top-0 z-40 h-14 border-b border-slate-800 bg-slate-950/95 backdrop-blur-sm px-6 flex items-center justify-between flex-shrink-0">
-        <Link href="/" className="text-lg font-bold tracking-wide text-slate-100">
-          ClausePal
-        </Link>
-        <nav className="flex items-center gap-5 text-sm">
-          {result && (
-            <span className="text-slate-500 hidden sm:inline">
-              {contractType} · {country}
-            </span>
-          )}
-          {userId && (
-            <Link href="/history" className="text-slate-400 hover:text-slate-200 transition-colors">
-              History
-            </Link>
-          )}
-          {userId ? (
-            <button
-              type="button"
-              title={userEmail ?? undefined}
-              onClick={() => supabase.auth.signOut()}
-              className="text-slate-400 hover:text-slate-200 transition-colors"
-            >
-              Sign Out
-            </button>
-          ) : (
-            <Link href="/auth" className="text-emerald-500 hover:text-emerald-400 transition-colors font-medium">
-              Sign In
-            </Link>
-          )}
-        </nav>
-      </header>
+      {/* ── Nav ── */}
+      <nav className="az-nav">
+        <div className="az-nav-inner">
+          <Link href="/" className="az-brand">
+            <div className="az-badge">§</div>
+            <div className="az-brand-name">ClausePal</div>
+          </Link>
+          <div className="az-nav-right">
+            {result && (
+              <span className="az-step" style={{ padding: '9px 16px' }}>
+                {contractType} · {country}
+              </span>
+            )}
+            {userId && (
+              <Link href="/history" className="az-pill">History</Link>
+            )}
+            {userId ? (
+              <>
+                <button
+                  type="button"
+                  title={userEmail ?? undefined}
+                  onClick={() => supabase.auth.signOut()}
+                  className="az-pill"
+                >
+                  Sign out
+                </button>
+                {userEmail && (
+                  <div className="az-avatar">
+                    {userEmail[0].toUpperCase()}
+                  </div>
+                )}
+              </>
+            ) : (
+              <Link href="/auth" className="az-pill" style={{ color: 'var(--forest)', fontWeight: 600 }}>
+                Sign In
+              </Link>
+            )}
+          </div>
+        </div>
+      </nav>
 
       {/* ── Main ── */}
       {!result ? (
-        /* ── Pre-analysis: centered form ── */
-        <main className="min-h-[calc(100vh-3.5rem)] bg-slate-950 flex items-start justify-center pt-14 px-4 pb-12">
-          <div className="w-full max-w-2xl">
-            <div className="mb-8">
-              <h1 className="text-3xl font-semibold text-slate-100 mb-2">Analyze your contract</h1>
-              <p className="text-slate-400">
-                Paste the text or upload a PDF. We&apos;ll break it down clause by clause.
-              </p>
+        /* ── Pre-analysis: editorial upload form ── */
+        <main className="az-main">
+          <div className="az-wrap">
+            <div className="az-eyebrow">
+              <span className="az-tag">⚖ New analysis</span>
+              <span className="az-step">Step 1 of 2 — Upload</span>
             </div>
+            <h1 className="az-h1">Analyze your <em>contract.</em></h1>
+            <p className="az-sub">
+              Paste the text or upload a PDF. ClausePal breaks it down clause by clause,
+              scores the risk, and flags what to look at first.
+            </p>
 
+            {/* context strip */}
             {userContext && (
-              <div className="mb-5 flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-300">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-                  <span className="font-medium text-slate-100">{userContext.role}</span>
-                  {userContext.companyName && <span className="text-slate-500">· {userContext.companyName}</span>}
-                  <span className="text-slate-500">· {userContext.industry}</span>
-                  <span className="text-slate-500">· {userContext.jurisdiction}</span>
-                  <span className="text-slate-500">· {userContext.mainConcern}</span>
+              <div className="az-context">
+                <div className="az-ctx-left">
+                  <span className="az-ctx-dot" />
+                  <span className="az-ctx-role">{userContext.role}</span>
+                  <span className="az-ctx-meta">
+                    {userContext.companyName && <span>{userContext.companyName}</span>}
+                    <span>{userContext.industry}</span>
+                    <span>{userContext.jurisdiction}</span>
+                    <span>{userContext.mainConcern}</span>
+                  </span>
                 </div>
                 <button
                   type="button"
+                  className="az-ctx-edit"
                   onClick={() => setShowOnboarding(true)}
-                  className="text-xs text-slate-500 hover:text-slate-300 transition-colors flex-shrink-0 ml-4"
                 >
-                  Edit
+                  Edit profile
                 </button>
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Contract type + country row */}
-              <div className="flex gap-3">
-                <select
-                  value={contractType}
-                  onChange={e => setContractType(e.target.value)}
-                  className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-emerald-500 transition-colors"
-                >
-                  {['Rental','Job Offer','Freelance','NDA','SaaS','Other'].map(t => (
-                    <option key={t}>{t}</option>
-                  ))}
-                </select>
-                <input
-                  value={country}
-                  onChange={e => setCountry(e.target.value)}
-                  placeholder="Jurisdiction (e.g. India, US)"
-                  className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
-                />
+            <form onSubmit={handleSubmit}>
+              {/* selectors */}
+              <div className="az-selectors">
+                <div className="az-sfield">
+                  <label>Contract type</label>
+                  <div className="az-sel-wrap">
+                    <select
+                      className="az-select"
+                      value={contractType}
+                      onChange={e => setContractType(e.target.value)}
+                    >
+                      {['Rental / Lease', 'NDA', 'Master Services Agreement', 'Statement of Work',
+                        'Employment', 'Freelance / Contractor', 'Terms of Service', 'Job Offer', 'SaaS', 'Other']
+                        .map(t => <option key={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="az-sfield">
+                  <label>Jurisdiction</label>
+                  <input
+                    className="az-jinput"
+                    type="text"
+                    value={country}
+                    onChange={e => setCountry(e.target.value)}
+                    placeholder="e.g. India, California, EU"
+                  />
+                </div>
               </div>
 
-              {/* Textarea with floating PDF button */}
-              <div className="relative">
+              {/* paste area */}
+              <div className="az-paste">
                 <textarea
                   value={contractText}
                   onChange={e => setContractText(e.target.value)}
-                  rows={14}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 font-mono placeholder:text-slate-500 placeholder:font-sans focus:outline-none focus:border-emerald-500 transition-colors resize-none"
                   placeholder="Paste the full contract text here…"
                 />
-                <div className="absolute top-3 right-3 flex items-center gap-2">
-                  {pdfLoading && (
-                    <span className="text-xs text-slate-400">Extracting…</span>
-                  )}
-                  {pdfFileName && !pdfLoading && (
-                    <span className="text-xs text-emerald-400 max-w-[140px] truncate">{pdfFileName}</span>
-                  )}
-                  <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={handlePdfUpload} />
-                  <button
-                    type="button"
-                    disabled={pdfLoading}
-                    onClick={() => fileInputRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:border-slate-500 hover:text-slate-100 transition-colors disabled:opacity-50"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    Upload PDF
-                  </button>
-                </div>
+                <input ref={fileInputRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={handlePdfUpload} />
+                <button
+                  type="button"
+                  className="az-upload-btn"
+                  disabled={pdfLoading}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload style={{ width: 14, height: 14 }} />
+                  {pdfLoading ? 'Extracting…' : 'Upload PDF'}
+                </button>
+                <span className="az-paste-meta">
+                  {pdfFileName && !pdfLoading
+                    ? pdfFileName
+                    : `${charCount.toLocaleString()} character${charCount === 1 ? '' : 's'}`}
+                </span>
               </div>
 
-              {error && (
-                <div className="rounded-lg border border-red-500/40 bg-red-950/30 px-3 py-2 text-sm text-red-300">
-                  {error}
-                </div>
-              )}
+              {error && <div className="az-error">{error}</div>}
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-900 font-semibold py-3 text-base transition-colors"
-              >
-                {loading ? "Analyzing…" : "Analyze Contract"}
+              <button type="submit" className="az-analyze-btn" disabled={loading}>
+                {loading ? 'Reading clause by clause…' : 'Analyze contract →'}
               </button>
             </form>
 
-            <p className="mt-4 text-center text-xs text-slate-600">
+            <p className="az-disclaimer">
               Not legal advice. For important decisions, consult a qualified lawyer.
             </p>
           </div>
         </main>
       ) : (
         /* ── Post-analysis: two-panel layout ── */
-        <div className="flex bg-slate-950" style={{ height: 'calc(100vh - 3.5rem)' }}>
+        <div className="flex" style={{ height: 'calc(100vh - 74px)', background: '#F2EFEB' }}>
 
           {/* ── Left panel — tabbed results (60%) ── */}
-          <div className="flex flex-col border-r border-slate-800" style={{ width: '60%' }}>
+          <div className="flex flex-col" style={{ width: '60%', borderRight: '1px solid rgba(26,22,18,.13)' }}>
 
             {/* Tab bar */}
-            <div className="flex items-center border-b border-slate-800 flex-shrink-0 px-2 h-12">
+            <div className="flex items-center flex-shrink-0 px-2 h-12" style={{ borderBottom: '1px solid rgba(26,22,18,.13)', background: '#FBFAF7' }}>
               {TABS.map(tab => (
                 <button
                   key={tab.id}
@@ -428,9 +441,10 @@ export default function AnalyzePage() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`px-4 h-full text-sm font-medium transition-colors border-b-2 ${
                     activeTab === tab.id
-                      ? 'border-emerald-500 text-emerald-400'
-                      : 'border-transparent text-slate-400 hover:text-slate-200'
+                      ? 'border-[#1F4A3B] text-[#1F4A3B]'
+                      : 'border-transparent text-[#4A453E] hover:text-[#1A1612]'
                   }`}
+                  style={{ fontFamily: '"Hanken Grotesk", system-ui, sans-serif' }}
                 >
                   {tab.label}
                 </button>
@@ -439,7 +453,8 @@ export default function AnalyzePage() {
                 <button
                   type="button"
                   onClick={downloadResults}
-                  className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                  className="inline-flex items-center gap-1.5 text-xs transition-colors"
+                  style={{ color: '#4A453E', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '.04em' }}
                 >
                   <Download className="w-3.5 h-3.5" />
                   Export
@@ -447,7 +462,8 @@ export default function AnalyzePage() {
                 <button
                   type="button"
                   onClick={() => { setResult(null); setActiveTab('scorecard'); setChatMessages([]); }}
-                  className="text-xs text-slate-500 hover:text-emerald-400 transition-colors border border-slate-700 hover:border-emerald-500/50 rounded px-2.5 py-1"
+                  className="text-xs transition-colors rounded px-2.5 py-1"
+                  style={{ color: '#4A453E', border: '1px solid rgba(26,22,18,.18)', fontFamily: '"JetBrains Mono", monospace' }}
                 >
                   + New
                 </button>
@@ -455,7 +471,7 @@ export default function AnalyzePage() {
             </div>
 
             {/* Tab content */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-6" style={{ background: '#F2EFEB' }}>
 
               {activeTab === 'scorecard' && (
                 <div className="space-y-6">
@@ -466,7 +482,7 @@ export default function AnalyzePage() {
                       summary={result.playbookComparison!.summary}
                     />
                   ) : (
-                    <div className="rounded-xl border border-slate-800 bg-slate-900 px-5 py-4 text-sm text-slate-400">
+                    <div className="rounded-xl px-5 py-4 text-sm" style={{ border: '1px solid rgba(26,22,18,.13)', background: '#FBFAF7', color: '#4A453E' }}>
                       No scorecard data available for this contract.
                     </div>
                   )}
@@ -474,7 +490,7 @@ export default function AnalyzePage() {
                   {/* Comprehensive analysis */}
                   <div className="space-y-4">
                     <AnalysisSection title="Plain English Summary">
-                      <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">{result.summary}</p>
+                      <p className="text-sm leading-relaxed whitespace-pre-line" style={{ color: '#4A453E' }}>{result.summary}</p>
                     </AnalysisSection>
                     <AnalysisSection title="Your Obligations">
                       <BulletList items={result.yourObligations} />
@@ -490,14 +506,14 @@ export default function AnalyzePage() {
                     </AnalysisSection>
                     {result.riskOverview?.trim() && (
                       <AnalysisSection title="Risk Overview">
-                        <p className="text-sm text-slate-300 leading-relaxed">{result.riskOverview}</p>
+                        <p className="text-sm leading-relaxed" style={{ color: '#4A453E' }}>{result.riskOverview}</p>
                       </AnalysisSection>
                     )}
                     {result.mitigationSteps && result.mitigationSteps.length > 0 && (
                       <AnalysisSection title="Mitigation Steps">
                         {result.mitigationSteps.map((m, i) => (
                           <div key={i} className="mb-3">
-                            <p className="text-sm font-semibold text-slate-200 mb-1">{m.title}</p>
+                            <p className="text-sm font-semibold mb-1" style={{ color: '#1A1612' }}>{m.title}</p>
                             <BulletList items={m.steps} />
                           </div>
                         ))}
@@ -507,7 +523,7 @@ export default function AnalyzePage() {
                       <AnalysisSection title="Compliance Processes">
                         {result.complianceProcesses.map((c, i) => (
                           <div key={i} className="mb-3">
-                            <p className="text-sm font-semibold text-slate-200 mb-1">{c.title}</p>
+                            <p className="text-sm font-semibold mb-1" style={{ color: '#1A1612' }}>{c.title}</p>
                             <BulletList items={c.process} />
                           </div>
                         ))}
@@ -539,24 +555,25 @@ export default function AnalyzePage() {
           </div>
 
           {/* ── Right panel — chat (40%) ── */}
-          <div className="flex flex-col bg-slate-950" style={{ width: '40%' }}>
+          <div className="flex flex-col" style={{ width: '40%', background: '#FBFAF7' }}>
             {/* Panel header */}
-            <div className="h-12 border-b border-slate-800 px-5 flex items-center flex-shrink-0">
-              <h2 className="text-sm font-semibold text-slate-100">Chat with your contract</h2>
+            <div className="h-12 px-5 flex items-center flex-shrink-0" style={{ borderBottom: '1px solid rgba(26,22,18,.13)' }}>
+              <h2 className="text-sm font-semibold" style={{ color: '#1A1612', fontFamily: '"Newsreader", Georgia, serif', fontSize: 16 }}>Chat with your contract</h2>
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 min-h-0">
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 min-h-0" style={{ background: '#F2EFEB' }}>
               {chatMessages.length === 0 ? (
                 <div className="space-y-2.5 pt-2">
-                  <p className="text-xs text-slate-500 px-1">Suggested questions:</p>
+                  <p className="text-xs px-1" style={{ color: '#4A453E', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '.06em', textTransform: 'uppercase' }}>Suggested questions:</p>
                   {suggestedQuestions.map((q, i) => (
                     <button
                       key={i}
                       type="button"
                       onClick={() => sendMessage(q)}
                       disabled={chatLoading}
-                      className="w-full text-left text-sm text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-xl px-4 py-3 transition-colors disabled:opacity-50"
+                      className="w-full text-left text-sm transition-colors disabled:opacity-50"
+                      style={{ color: '#1A1612', background: '#FBFAF7', border: '1px solid rgba(26,22,18,.13)', borderRadius: 12, padding: '12px 16px', fontFamily: '"Hanken Grotesk", system-ui, sans-serif' }}
                     >
                       {q}
                     </button>
@@ -566,15 +583,15 @@ export default function AnalyzePage() {
                 chatMessages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
-                        msg.role === 'user'
-                          ? 'bg-emerald-500 text-slate-900 font-medium'
-                          : 'bg-slate-800 text-slate-200'
-                      }`}
+                      className="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap"
+                      style={msg.role === 'user'
+                        ? { background: '#1F4A3B', color: '#EFEDE6', fontWeight: 500 }
+                        : { background: '#FBFAF7', color: '#1A1612', border: '1px solid rgba(26,22,18,.11)' }
+                      }
                     >
                       {msg.content ||
                         (chatLoading && i === chatMessages.length - 1
-                          ? <span className="text-slate-500 animate-pulse">▋</span>
+                          ? <span style={{ color: '#4A453E' }} className="animate-pulse">▋</span>
                           : null
                         )
                       }
@@ -586,7 +603,7 @@ export default function AnalyzePage() {
             </div>
 
             {/* Input */}
-            <div className="px-4 py-3 border-t border-slate-800 flex-shrink-0">
+            <div className="px-4 py-3 flex-shrink-0" style={{ borderTop: '1px solid rgba(26,22,18,.13)' }}>
               <form
                 onSubmit={e => { e.preventDefault(); sendMessage(chatInput); }}
                 className="flex gap-2"
@@ -597,12 +614,14 @@ export default function AnalyzePage() {
                   onChange={e => setChatInput(e.target.value)}
                   placeholder="Ask anything about this contract…"
                   disabled={chatLoading}
-                  className="flex-1 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 disabled:opacity-50 transition-colors"
+                  className="flex-1 rounded-xl px-4 py-2.5 text-sm disabled:opacity-50 transition-colors outline-none"
+                  style={{ border: '1px solid rgba(26,22,18,.13)', background: '#F2EFEB', color: '#1A1612', fontFamily: '"Hanken Grotesk", system-ui, sans-serif' }}
                 />
                 <button
                   type="submit"
                   disabled={chatLoading || !chatInput.trim()}
-                  className="rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed p-2.5 text-slate-900 transition-colors flex-shrink-0"
+                  className="rounded-xl disabled:opacity-40 disabled:cursor-not-allowed p-2.5 transition-colors flex-shrink-0"
+                  style={{ background: '#1F4A3B', color: '#EFEDE6' }}
                 >
                   <Send className="w-4 h-4" />
                 </button>
@@ -627,8 +646,8 @@ export default function AnalyzePage() {
 
 function AnalysisSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-      <h3 className="text-sm font-semibold text-slate-200 mb-2">{title}</h3>
+    <div className="rounded-xl p-4" style={{ border: '1px solid rgba(26,22,18,.13)', background: '#FBFAF7' }}>
+      <h3 className="text-sm font-semibold mb-2" style={{ fontFamily: '"Newsreader", Georgia, serif', fontSize: 15, color: '#1A1612' }}>{title}</h3>
       {children}
     </div>
   );
@@ -636,13 +655,13 @@ function AnalysisSection({ title, children }: { title: string; children: React.R
 
 function BulletList({ items }: { items?: string[] }) {
   if (!items || items.length === 0) {
-    return <p className="text-sm text-slate-500">Nothing specific found in this section.</p>;
+    return <p className="text-sm" style={{ color: '#4A453E' }}>Nothing specific found in this section.</p>;
   }
   return (
     <ul className="space-y-1">
       {items.map((item, i) => (
-        <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
-          <span className="text-slate-600 mt-1 flex-shrink-0">·</span>
+        <li key={i} className="text-sm flex items-start gap-2" style={{ color: '#4A453E' }}>
+          <span className="mt-1 flex-shrink-0" style={{ color: 'rgba(26,22,18,.30)' }}>·</span>
           {item}
         </li>
       ))}
@@ -651,5 +670,5 @@ function BulletList({ items }: { items?: string[] }) {
 }
 
 function EmptyTab({ message }: { message: string }) {
-  return <div className="py-12 text-center text-slate-500 text-sm">{message}</div>;
+  return <div className="py-12 text-center text-sm" style={{ color: '#4A453E', fontFamily: '"Newsreader", Georgia, serif', fontStyle: 'italic', fontSize: 16 }}>{message}</div>;
 }

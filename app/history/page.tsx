@@ -1,9 +1,9 @@
 "use client";
 
+import "./history.css";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, FileText, ChevronDown, ChevronUp } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { QuickDecisionDashboard } from "@/components/QuickDecisionDashboard";
 import { ClauseAnalysis } from "@/components/ClauseAnalysis";
@@ -20,21 +20,7 @@ type SavedContract = {
   created_at: string;
 };
 
-const VERDICT_STYLE: Record<string, string> = {
-  SIGN: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-  NEGOTIATE: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  "WALK AWAY": "bg-red-500/20 text-red-400 border-red-500/30",
-};
-
-function VerdictBadge({ verdict }: { verdict: string | null }) {
-  if (!verdict) return null;
-  const style = VERDICT_STYLE[verdict] ?? "bg-slate-700 text-slate-400 border-slate-600";
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${style}`}>
-      {verdict}
-    </span>
-  );
-}
+type FilterKey = "all" | "sign" | "negotiate" | "walk";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -44,11 +30,32 @@ function formatDate(iso: string) {
   });
 }
 
+function monthLabel(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+function verdictClass(v: string | null) {
+  if (v === "SIGN") return "vb-sign";
+  if (v === "NEGOTIATE") return "vb-negotiate";
+  if (v === "WALK AWAY") return "vb-walk";
+  return "vb-none";
+}
+
+function verdictLabel(v: string | null) {
+  if (v === "SIGN") return "✓ Sign";
+  if (v === "NEGOTIATE") return "⚠ Negotiate";
+  if (v === "WALK AWAY") return "✗ Walk away";
+  return "—";
+}
+
 export default function HistoryPage() {
   const router = useRouter();
   const [contracts, setContracts] = useState<SavedContract[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterKey>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -56,6 +63,7 @@ export default function HistoryPage() {
         router.push("/auth");
         return;
       }
+      setUserEmail(session.user.email ?? null);
       const { data, error } = await supabase
         .from("saved_contracts")
         .select("*")
@@ -70,143 +78,247 @@ export default function HistoryPage() {
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
+  // Filter + search
+  const filtered = contracts.filter((c) => {
+    const matchFilter =
+      filter === "all" ||
+      (filter === "sign" && c.verdict === "SIGN") ||
+      (filter === "negotiate" && c.verdict === "NEGOTIATE") ||
+      (filter === "walk" && c.verdict === "WALK AWAY");
+    const q = searchQuery.toLowerCase();
+    const matchSearch =
+      !q ||
+      c.contract_name.toLowerCase().includes(q) ||
+      (c.contract_type ?? "").toLowerCase().includes(q) ||
+      (c.country ?? "").toLowerCase().includes(q);
+    return matchFilter && matchSearch;
+  });
+
+  // Group by month with dividers
+  const grouped: Array<{ month: string; items: SavedContract[] }> = [];
+  for (const c of filtered) {
+    const m = monthLabel(c.created_at);
+    const last = grouped[grouped.length - 1];
+    if (last && last.month === m) {
+      last.items.push(c);
+    } else {
+      grouped.push({ month: m, items: [c] });
+    }
+  }
+
+  // Stats
+  const total = contracts.length;
+  const signCount = contracts.filter((c) => c.verdict === "SIGN").length;
+  const negotiateCount = contracts.filter((c) => c.verdict === "NEGOTIATE").length;
+  const walkCount = contracts.filter((c) => c.verdict === "WALK AWAY").length;
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center">
-        <div className="text-slate-400 text-sm">Loading history...</div>
+      <div className="hs-loading">
+        Loading history…
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <Link
-            href="/analyze"
-            className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors text-sm"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Analyze
+    <div className="hs-root">
+      {/* ── Nav ── */}
+      <nav className="hs-nav">
+        <div className="hs-nav-inner">
+          <Link href="/" className="hs-brand">
+            <div className="hs-badge">§</div>
+            <div className="hs-brand-name">ClausePal</div>
           </Link>
+          <div className="hs-nav-right">
+            <Link href="/history" className="hs-pill active">History</Link>
+            <button
+              type="button"
+              className="hs-pill"
+              onClick={() => supabase.auth.signOut().then(() => router.push("/auth"))}
+            >
+              Sign out
+            </button>
+            {userEmail && (
+              <div className="hs-avatar">{userEmail[0].toUpperCase()}</div>
+            )}
+          </div>
+        </div>
+      </nav>
+
+      {/* ── Page ── */}
+      <div className="hs-page">
+
+        {/* header */}
+        <div className="hs-head">
+          <div>
+            <div className="hs-eyebrow">
+              Your archive · {total} {total === 1 ? "analysis" : "analyses"}
+            </div>
+            <h1 className="hs-h1">Every contract <em>you&apos;ve</em> read.</h1>
+          </div>
+          <Link href="/analyze" className="hs-new-btn">+ Analyze a new contract</Link>
         </div>
 
-        <h1 className="text-3xl font-semibold mb-1">Contract History</h1>
-        <p className="text-slate-400 text-sm mb-8">Your past analyses, newest first.</p>
+        {/* stats */}
+        <div className="hs-stats">
+          <div className="hs-stat">
+            <div className="st-num">{total}</div>
+            <div className="st-name">Total analyzed</div>
+          </div>
+          <div className="hs-stat s-forest">
+            <div className="st-num">{signCount}</div>
+            <div className="st-name">Safe to sign</div>
+          </div>
+          <div className="hs-stat s-yellow">
+            <div className="st-num">{negotiateCount}</div>
+            <div className="st-name">Negotiate first</div>
+          </div>
+          <div className="hs-stat s-red">
+            <div className="st-num">{walkCount}</div>
+            <div className="st-name">Walk away</div>
+          </div>
+        </div>
 
+        {/* toolbar */}
+        <div className="hs-toolbar">
+          <div className="hs-filters">
+            {(["all", "sign", "negotiate", "walk"] as FilterKey[]).map((f) => (
+              <button
+                key={f}
+                type="button"
+                className={`hs-filter${filter === f ? " active" : ""}`}
+                onClick={() => setFilter(f)}
+              >
+                {f === "all" ? "All" : f === "sign" ? "Sign" : f === "negotiate" ? "Negotiate" : "Walk away"}
+              </button>
+            ))}
+          </div>
+          <div className="hs-search">
+            <span className="hs-search-icon">⌕</span>
+            <input
+              type="text"
+              placeholder="Search contracts…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* list */}
         {contracts.length === 0 ? (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-6 py-16 text-center">
-            <FileText className="w-10 h-10 text-slate-600 mx-auto mb-4" />
-            <p className="text-slate-300 font-medium mb-1">No contracts analyzed yet</p>
-            <p className="text-slate-500 text-sm mb-6">
+          <div className="hs-empty">
+            <div className="hs-empty-icon">§</div>
+            <p style={{ marginBottom: 8, fontStyle: 'normal', fontFamily: 'var(--sans)', fontSize: 16, fontWeight: 600, color: 'var(--ink)' }}>
+              No contracts analyzed yet
+            </p>
+            <p style={{ marginBottom: 24, fontSize: 14, fontStyle: 'normal' }}>
               Upload your first contract to see your history here.
             </p>
-            <Link
-              href="/analyze"
-              className="inline-block bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-semibold px-5 py-2 rounded-lg text-sm transition-colors"
-            >
-              Analyze a Contract
-            </Link>
+            <Link href="/analyze" className="hs-new-btn">Analyze a Contract</Link>
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="hs-empty">No contracts match that filter.</div>
         ) : (
-          <div className="space-y-3">
-            {contracts.map((contract) => {
-              const isExpanded = expandedId === contract.id;
-              const result = contract.analysis_result;
-              const hasClauses =
-                result?.playbookComparison?.clauseAnalysis?.length > 0;
+          <div className="hs-list">
+            {grouped.map(({ month, items }) => (
+              <React.Fragment key={month}>
+                <div className="hs-divider">{month}</div>
+                {items.map((contract) => {
+                  const isExpanded = expandedId === contract.id;
+                  const result = contract.analysis_result;
+                  const hasClauses = result?.playbookComparison?.clauseAnalysis?.length > 0;
 
-              return (
-                <div
-                  key={contract.id}
-                  className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden"
-                >
-                  {/* Row */}
-                  <button
-                    type="button"
-                    onClick={() => toggleExpand(contract.id)}
-                    className="w-full text-left px-5 py-4 flex items-center gap-4 hover:bg-slate-800/50 transition-colors"
-                  >
-                    <FileText className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                  return (
+                    <React.Fragment key={contract.id}>
+                      <button
+                        type="button"
+                        className={`hs-row${isExpanded ? " expanded" : ""}`}
+                        onClick={() => toggleExpand(contract.id)}
+                      >
+                        <div className="hs-row-icon">§</div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <span className="font-medium text-slate-100 truncate">
-                          {contract.contract_name}
-                        </span>
-                        {contract.contract_type && (
-                          <span className="text-xs text-slate-500 bg-slate-800 px-2 py-0.5 rounded">
-                            {contract.contract_type}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-slate-500 mt-0.5">
-                        {formatDate(contract.created_at)}
-                        {contract.country && ` · ${contract.country}`}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <VerdictBadge verdict={contract.verdict} />
-                      {contract.deal_score !== null && (
-                        <span className="text-sm font-semibold text-slate-300 tabular-nums w-12 text-right">
-                          {contract.deal_score}
-                          <span className="text-slate-500 font-normal">/100</span>
-                        </span>
-                      )}
-                      {isExpanded ? (
-                        <ChevronUp className="w-4 h-4 text-slate-500" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-slate-500" />
-                      )}
-                    </div>
-                  </button>
-
-                  {/* Expanded analysis */}
-                  {isExpanded && result && (
-                    <div className="border-t border-slate-800 p-5 space-y-6">
-                      {hasClauses && (
-                        <>
-                          <QuickDecisionDashboard
-                            clauses={result.playbookComparison.clauseAnalysis}
-                            overallScore={result.playbookComparison.overallScore}
-                            summary={result.playbookComparison.summary}
-                          />
-                          <ClauseAnalysis
-                            clauses={result.playbookComparison.clauseAnalysis}
-                          />
-                          <div className="border-t border-slate-700 pt-5">
-                            <h2 className="text-xl font-semibold mb-4">Comprehensive Analysis</h2>
+                        <div className="row-main">
+                          <div className="r-title">{contract.contract_name}</div>
+                          <div className="r-meta">
+                            {contract.contract_type && <span>{contract.contract_type}</span>}
+                            {contract.country && <span>{contract.country}</span>}
+                            {hasClauses && (
+                              <span>
+                                {result.playbookComparison.clauseAnalysis.length} clauses
+                              </span>
+                            )}
                           </div>
-                        </>
-                      )}
+                        </div>
 
-                      {result.summary && (
-                        <Section title="Plain English Summary">
-                          <p className="text-sm leading-relaxed text-slate-300">{result.summary}</p>
-                        </Section>
+                        {contract.deal_score !== null ? (
+                          <div className="r-score">
+                            <div className="rs-num">{contract.deal_score}</div>
+                            <div className="rs-lab">Deal</div>
+                          </div>
+                        ) : (
+                          <div />
+                        )}
+
+                        <span className={`hs-verdict ${verdictClass(contract.verdict)}`}>
+                          {verdictLabel(contract.verdict)}
+                        </span>
+
+                        <div className="r-date">{formatDate(contract.created_at)}</div>
+                      </button>
+
+                      {isExpanded && result && (
+                        <div className="hs-expanded">
+                          {hasClauses && (
+                            <>
+                              <QuickDecisionDashboard
+                                clauses={result.playbookComparison.clauseAnalysis}
+                                overallScore={result.playbookComparison.overallScore}
+                                summary={result.playbookComparison.summary}
+                              />
+                              <ClauseAnalysis
+                                clauses={result.playbookComparison.clauseAnalysis}
+                              />
+                            </>
+                          )}
+                          {result.summary && (
+                            <HistSection title="Plain English Summary">
+                              <p>{result.summary}</p>
+                            </HistSection>
+                          )}
+                          {result.yourObligations?.length > 0 && (
+                            <HistSection title="Your Obligations">
+                              <ul>
+                                {result.yourObligations.map((item: string, i: number) => (
+                                  <li key={i}>{item}</li>
+                                ))}
+                              </ul>
+                            </HistSection>
+                          )}
+                          {result.theirObligations?.length > 0 && (
+                            <HistSection title="Their Obligations">
+                              <ul>
+                                {result.theirObligations.map((item: string, i: number) => (
+                                  <li key={i}>{item}</li>
+                                ))}
+                              </ul>
+                            </HistSection>
+                          )}
+                          {result.risks?.length > 0 && (
+                            <HistSection title="Risks & Red Flags">
+                              <ul>
+                                {result.risks.map((item: string, i: number) => (
+                                  <li key={i}>{item}</li>
+                                ))}
+                              </ul>
+                            </HistSection>
+                          )}
+                        </div>
                       )}
-                      {result.yourObligations?.length > 0 && (
-                        <Section title="Your Obligations">
-                          <BulletList items={result.yourObligations} />
-                        </Section>
-                      )}
-                      {result.theirObligations?.length > 0 && (
-                        <Section title="Their Obligations">
-                          <BulletList items={result.theirObligations} />
-                        </Section>
-                      )}
-                      {result.risks?.length > 0 && (
-                        <Section title="Risks & Red Flags">
-                          <BulletList items={result.risks} />
-                        </Section>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    </React.Fragment>
+                  );
+                })}
+              </React.Fragment>
+            ))}
           </div>
         )}
       </div>
@@ -214,21 +326,11 @@ export default function HistoryPage() {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function HistSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-      <h2 className="text-base font-semibold mb-2">{title}</h2>
+    <div className="hs-section">
+      <h2>{title}</h2>
       {children}
     </div>
-  );
-}
-
-function BulletList({ items }: { items: string[] }) {
-  return (
-    <ul className="list-disc pl-5 space-y-1 text-sm text-slate-300">
-      {items.map((item, idx) => (
-        <li key={idx} className="leading-snug">{item}</li>
-      ))}
-    </ul>
   );
 }
