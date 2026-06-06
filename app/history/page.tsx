@@ -5,8 +5,6 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { QuickDecisionDashboard } from "@/components/QuickDecisionDashboard";
-import { ClauseAnalysis } from "@/components/ClauseAnalysis";
 
 type SavedContract = {
   id: string;
@@ -268,50 +266,7 @@ export default function HistoryPage() {
 
                       {isExpanded && result && (
                         <div className="hs-expanded">
-                          {hasClauses && (
-                            <>
-                              <QuickDecisionDashboard
-                                clauses={result.playbookComparison.clauseAnalysis}
-                                overallScore={result.playbookComparison.overallScore}
-                                summary={result.playbookComparison.summary}
-                              />
-                              <ClauseAnalysis
-                                clauses={result.playbookComparison.clauseAnalysis}
-                              />
-                            </>
-                          )}
-                          {result.summary && (
-                            <HistSection title="Plain English Summary">
-                              <p>{result.summary}</p>
-                            </HistSection>
-                          )}
-                          {result.yourObligations?.length > 0 && (
-                            <HistSection title="Your Obligations">
-                              <ul>
-                                {result.yourObligations.map((item: string, i: number) => (
-                                  <li key={i}>{item}</li>
-                                ))}
-                              </ul>
-                            </HistSection>
-                          )}
-                          {result.theirObligations?.length > 0 && (
-                            <HistSection title="Their Obligations">
-                              <ul>
-                                {result.theirObligations.map((item: string, i: number) => (
-                                  <li key={i}>{item}</li>
-                                ))}
-                              </ul>
-                            </HistSection>
-                          )}
-                          {result.risks?.length > 0 && (
-                            <HistSection title="Risks & Red Flags">
-                              <ul>
-                                {result.risks.map((item: string, i: number) => (
-                                  <li key={i}>{item}</li>
-                                ))}
-                              </ul>
-                            </HistSection>
-                          )}
+                          <CompactPreview result={result} contractId={contract.id} />
                         </div>
                       )}
                     </React.Fragment>
@@ -326,11 +281,54 @@ export default function HistoryPage() {
   );
 }
 
-function HistSection({ title, children }: { title: string; children: React.ReactNode }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function CompactPreview({ result, contractId }: { result: any; contractId: string }) {
+  const overallScore = result?.playbookComparison?.overallScore;
+  const fav   = overallScore?.favourabilityScore   ?? null;
+  const trust = overallScore?.counterpartyTrustScore ?? null;
+  const deal  = overallScore?.dealScore              ?? null;
+
+  const scoreColor = (n: number | null) => {
+    if (n === null) return '#4A453E';
+    return n >= 70 ? '#1F4A3B' : n >= 40 ? '#A07C10' : '#B23A2E';
+  };
+  const barColor = (n: number | null) => {
+    if (n === null) return 'rgba(26,22,18,.10)';
+    return n >= 70 ? '#1F4A3B' : n >= 40 ? '#EFB23E' : '#B23A2E';
+  };
+
   return (
-    <div className="hs-section">
-      <h2>{title}</h2>
-      {children}
+    <div className="hs-preview">
+      {/* Summary */}
+      {result.summary && (
+        <p className="hs-preview-summary">{result.summary}</p>
+      )}
+
+      {/* Score boxes */}
+      {(fav !== null || trust !== null || deal !== null) && (
+        <div className="hs-preview-scores">
+          {[
+            { label: 'Favourability',      value: fav   },
+            { label: 'Counterparty Trust', value: trust },
+            { label: 'Deal Score',         value: deal  },
+          ].map(({ label, value }) => (
+            <div key={label} className="hs-preview-score-box">
+              <div className="hs-preview-score-num" style={{ color: scoreColor(value) }}>
+                {value ?? '—'}
+              </div>
+              <div className="hs-preview-score-bar">
+                <div style={{ height: '100%', width: `${value ?? 0}%`, background: barColor(value), borderRadius: 99 }} />
+              </div>
+              <div className="hs-preview-score-label">{label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Open full analysis */}
+      <Link href={`/analysis/${contractId}`} className="hs-open-btn">
+        Open Full Analysis →
+      </Link>
     </div>
   );
 }

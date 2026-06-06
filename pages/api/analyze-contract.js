@@ -9,15 +9,20 @@ export const config = {
   },
 };
 
+export const maxDuration = 120;
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
+  timeout: 600000, // 10 minutes in ms
 });
 
 export default async function handler(req, res) {
+  const t0 = Date.now();
+  const elapsed = () => `+${((Date.now() - t0) / 1000).toFixed(2)}s`;
   console.log("=== API Handler Called ===");
   console.log("Method:", req.method);
 
@@ -172,8 +177,42 @@ Instructions:
    - IMPORTANT: Do NOT filter or prioritize - include ALL clauses in your analysis
 `;
 
+    console.log(`[${elapsed()}] Step 4: Fetching knowledge base from database...`);
+    let knowledgeDocs = [];
+
+    if (userId) {
+      try {
+        const { data, error } = await supabase
+          .from('knowledge_documents')
+          .select('file_name, document_type, summary')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(10);
+        if (error) { console.log("Knowledge fetch error:", error.message); }
+        else if (data && data.length > 0) {
+          knowledgeDocs = data;
+          console.log(`Fetched ${knowledgeDocs.length} knowledge documents ✓`);
+        }
+      } catch (e) { console.log("Knowledge DB error (non-critical):", e.message); }
+    }
+
+    // Build knowledge base context block
+    let knowledgeContext = "";
+    if (knowledgeDocs.length > 0) {
+      const typeLabel = { playbook: 'Playbook', past_contract: 'Past Contract', template: 'Template', policy: 'Policy' };
+      knowledgeContext = `\n\nUSER'S KNOWLEDGE BASE:\nThe user has uploaded the following company documents. Use these to calibrate your analysis — flag deviations from their stated positions and non-negotiables:\n\n`;
+      knowledgeDocs.forEach(doc => {
+        knowledgeContext += `[${typeLabel[doc.document_type] ?? doc.document_type}] ${doc.file_name}\n`;
+        if (doc.summary?.overview)        knowledgeContext += `Overview: ${doc.summary.overview}\n`;
+        if (doc.summary?.nonNegotiables?.length) knowledgeContext += `Non-Negotiables: ${doc.summary.nonNegotiables.join(' | ')}\n`;
+        if (doc.summary?.keyPositions?.length)    knowledgeContext += `Key Positions: ${doc.summary.keyPositions.join(' | ')}\n`;
+        if (doc.summary?.watchPoints?.length)     knowledgeContext += `Watch Points: ${doc.summary.watchPoints.join(' | ')}\n`;
+        knowledgeContext += `---\n`;
+      });
+    }
+
     const userPrompt = `
-${contextBlock}Contract type: ${contractType}
+${contextBlock}${knowledgeContext}Contract type: ${contractType}
 Country: ${country}
 
 Contract:
@@ -182,100 +221,27 @@ ${trimmed}
 """
 `;
 
-    console.log("Step 4: Preparing Anthropic API call...");
-    console.log("Model: claude-sonnet-4-5");
-    console.log("Contract type:", contractType);
-    console.log("Country:", country);
-
-    let text;
-    try {
-      const result = await anthropic.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 16000,
-        temperature: 0.2,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
+    // Build playbook context from knowledge documents tagged as 'playbook'
+    console.log("knowledgeDocs raw:", JSON.stringify(knowledgeDocs, null, 2));
+    const playbookDocs = knowledgeDocs.filter(d => d.document_type === 'playbook');
+    console.log("playbookDocs after filter:", JSON.stringify(playbookDocs, null, 2));
+    const hasPlaybook = playbookDocs.length > 0;
+    console.log("hasPlaybook:", hasPlaybook);
+    let playbookContext = "";
+    if (hasPlaybook) {
+      playbookContext = `\n\nLEGAL PLAYBOOK (from your uploaded knowledge base):\nThe user has uploaded ${playbookDocs.length} playbook document(s). Use these as the standard to compare each contract clause against:\n\n`;
+      playbookDocs.forEach(doc => {
+        playbookContext += `Playbook: ${doc.file_name}\n`;
+        if (doc.summary?.overview)              playbookContext += `Overview: ${doc.summary.overview}\n`;
+        if (doc.summary?.keyPositions?.length)  playbookContext += `Key Positions: ${doc.summary.keyPositions.join(' | ')}\n`;
+        if (doc.summary?.nonNegotiables?.length) playbookContext += `Non-Negotiables (must flag if violated): ${doc.summary.nonNegotiables.join(' | ')}\n`;
+        if (doc.summary?.favorableTerms?.length) playbookContext += `Favorable Terms (standard acceptable language): ${doc.summary.favorableTerms.join(' | ')}\n`;
+        if (doc.summary?.watchPoints?.length)   playbookContext += `Watch Points: ${doc.summary.watchPoints.join(' | ')}\n`;
+        playbookContext += `---\n`;
       });
-      text = result.content[0].text;
-      console.log("Step 4: Anthropic API call completed ✓");
-    } catch (apiError) {
-      console.log("Anthropic API Error:", apiError.message);
-      throw new Error(`Anthropic API failed: ${apiError.message}`);
     }
 
-    console.log("Step 5: Processing Anthropic response...");
-    console.log("Response text (first 300 chars):", text.slice(0, 300));
-    console.log("Step 5: Response received ✓");
-
-    console.log("Step 6: Parsing final JSON from response...");
-
-    // Strip markdown code blocks if present
-    let cleanedText = text.trim();
-    if (cleanedText.startsWith("```json")) {
-      cleanedText = cleanedText.slice(7); // Remove ```json
-    } else if (cleanedText.startsWith("```")) {
-      cleanedText = cleanedText.slice(3); // Remove ```
-    }
-    if (cleanedText.endsWith("```")) {
-      cleanedText = cleanedText.slice(0, -3); // Remove trailing ```
-    }
-    cleanedText = cleanedText.trim();
-
-    console.log("Cleaned text (first 300 chars):", cleanedText.slice(0, 300));
-
-    const finalJson = JSON.parse(cleanedText);
-    console.log("Final JSON structure:", {
-      hasSummary: !!finalJson.summary,
-      hasYourObligations: !!finalJson.yourObligations,
-      hasTheirObligations: !!finalJson.theirObligations,
-      hasRisks: !!finalJson.risks,
-      hasQuestions: !!finalJson.questions,
-      yourObligationsCount: finalJson.yourObligations?.length || 0,
-      theirObligationsCount: finalJson.theirObligations?.length || 0,
-      risksCount: finalJson.risks?.length || 0,
-      questionsCount: finalJson.questions?.length || 0
-    });
-    console.log("Step 7: Final JSON parsed ✓");
-
-    console.log("Step 8: Fetching legal playbook from database...");
-    let playbookClauses = [];
-    try {
-      const { data, error } = await supabase
-        .from('legal_playbook')
-        .select('*')
-        .order('created_at', { ascending: true });
-
-      if (error) {
-        console.log("Playbook fetch error:", error.message);
-      } else if (data && data.length > 0) {
-        playbookClauses = data;
-        console.log(`Fetched ${playbookClauses.length} playbook clauses from database ✓`);
-      } else {
-        console.log("No playbook clauses found in database");
-      }
-    } catch (dbError) {
-      console.log("Database error (non-critical):", dbError.message);
-    }
-
-    console.log("Step 9: Performing clause analysis with playbook comparison...");
-    let playbookComparison = null;
-    try {
-        const hasPlaybook = playbookClauses.length > 0;
-
-        let playbookContext = "";
-        if (hasPlaybook) {
-          playbookContext = `\n\nLEGAL PLAYBOOK - STANDARD CLAUSES:\nYou have access to a legal playbook with ${playbookClauses.length} standard clauses. For each clause you analyze in the contract, compare it against these playbook standards:\n\n`;
-
-          playbookClauses.forEach(pc => {
-            playbookContext += `${pc.clause_title}\n`;
-            playbookContext += `Standard Language: ${pc.standard_language}\n`;
-            playbookContext += `Acceptable Variations: ${pc.acceptable_variations}\n`;
-            playbookContext += `Red Flags: ${pc.red_flags}\n`;
-            playbookContext += `---\n`;
-          });
-        }
-
-        const simplifiedPrompt = `You are a legal contract analyst. Analyze this contract and identify the TOP 3-5 MOST IMPORTANT clauses.${playbookContext}
+    const simplifiedPrompt = `You are a legal contract analyst. Analyze this contract and identify the TOP 3-5 MOST IMPORTANT clauses.${playbookContext}${knowledgeContext}
 
 ${contextBlock}CONTRACT TEXT:
 ${trimmed}
@@ -284,8 +250,9 @@ INSTRUCTIONS:
 1. Identify the 3-5 most critical clauses in this contract
 2. Focus on clauses that have the most significant business or legal impact
 3. Provide detailed analysis for each clause
-${hasPlaybook ? `4. IMPORTANT: For each clause, perform semantic matching against the legal playbook standards provided above
-5. Calculate deviation based on how much the contract clause differs from the playbook standard` : ''}
+${hasPlaybook ? `4. IMPORTANT: For each clause, compare the contract language against the LEGAL PLAYBOOK provided above.
+5. Check specifically whether the clause violates any of the Non-Negotiables, deviates from the Key Positions, or conflicts with the Favorable Terms listed in the playbook.
+6. Calculate deviation based on how much the contract clause differs from the playbook standards — use "critical" if a Non-Negotiable is violated, "major" if a Key Position is significantly contradicted, "moderate" for notable differences, "minor" for small variations, "none" if it matches.` : ''}
 
 For each clause, provide:
 - clauseNumber: Original identifier from contract (e.g., "1", "2", "Section A")
@@ -341,9 +308,9 @@ Return ONLY valid JSON:
           "strategyType": "soft pushback" | "risk framing" | "commercial tradeoff" | "fallback position" | "escalation trigger"
         }
       ],
-      "matchedPlaybookClause": "Quick Analysis Mode",
-      "playbookMatchFound": false,
-      "deviation": "no_playbook",
+      "matchedPlaybookClause": "string or null",
+      "playbookMatchFound": true or false,
+      "deviation": "none" | "minor" | "moderate" | "major" | "critical" | "no_match" | "no_playbook",
       "favourabilityScore": number,
       "favourabilityPercentage": number,
       "risk": "low" | "medium" | "high" | "critical"
@@ -372,23 +339,67 @@ SCORECARD INSTRUCTIONS (for overallScore fields):
 - verdict: "SIGN" if dealScore >= 70, "NEGOTIATE" if dealScore 40–69, "WALK AWAY" if dealScore < 40.
 - verdictReason: One plain-English sentence explaining the verdict (e.g. "The payment terms are fair but the IP assignment clause is unusually broad and should be negotiated.").`;
 
-        console.log('Calling Anthropic for simplified clause analysis...');
-        console.log('Simplified prompt length:', simplifiedPrompt.length);
-        console.log('Contract text length:', trimmed.length);
+    console.log(`[${elapsed()}] Step 5: Launching both Anthropic API calls in parallel...`);
+    console.log("Model: claude-sonnet-4-5");
+    console.log("Contract type:", contractType);
+    console.log("Country:", country);
 
-        const startTime = Date.now();
+    const startTime = Date.now();
 
-        const playbookResult = await anthropic.messages.create({
+    let call1Raw, call2Raw;
+    try {
+      [call1Raw, call2Raw] = await Promise.all([
+        anthropic.messages.create({
+          model: "claude-sonnet-4-5",
+          max_tokens: 16000,
+          temperature: 0.2,
+          system: systemPrompt,
+          messages: [{ role: "user", content: userPrompt }],
+        }),
+        anthropic.messages.create({
           model: "claude-sonnet-4-5",
           max_tokens: 16000,
           temperature: 0.3,
           messages: [{ role: "user", content: simplifiedPrompt }],
-        });
+        }),
+      ]);
+    } catch (apiError) {
+      console.log("Anthropic API Error:", apiError.message);
+      throw new Error(`Anthropic API failed: ${apiError.message}`);
+    }
 
-        const endTime = Date.now();
-        const duration = ((endTime - startTime) / 1000).toFixed(2);
-        console.log(`Simplified clause analysis completed in ${duration} seconds`);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`[${elapsed()}] Both API calls completed in ${duration}s ✓`);
 
+    // ── Parse call 1 → finalJson ──────────────────────────────────────────────
+    console.log("Step 6: Parsing general analysis response...");
+    const text = call1Raw.content[0].text;
+    console.log("Response text (first 300 chars):", text.slice(0, 300));
+
+    let cleanedText = text.trim();
+    if (cleanedText.startsWith("```json")) cleanedText = cleanedText.slice(7);
+    else if (cleanedText.startsWith("```"))   cleanedText = cleanedText.slice(3);
+    if (cleanedText.endsWith("```"))          cleanedText = cleanedText.slice(0, -3);
+    cleanedText = cleanedText.trim();
+
+    const finalJson = JSON.parse(cleanedText);
+    console.log("Final JSON structure:", {
+      hasSummary: !!finalJson.summary,
+      hasYourObligations: !!finalJson.yourObligations,
+      hasTheirObligations: !!finalJson.theirObligations,
+      hasRisks: !!finalJson.risks,
+      hasQuestions: !!finalJson.questions,
+      yourObligationsCount: finalJson.yourObligations?.length || 0,
+      theirObligationsCount: finalJson.theirObligations?.length || 0,
+      risksCount: finalJson.risks?.length || 0,
+      questionsCount: finalJson.questions?.length || 0
+    });
+    console.log(`[${elapsed()}] Step 6: General analysis parsed ✓`);
+
+    // ── Parse call 2 → playbookComparison ────────────────────────────────────
+    console.log("Step 7: Performing clause analysis with playbook comparison...");
+    let playbookComparison = null;
+    try {
         const cleanJson = (raw) => {
           let t = raw.trim();
           if (t.startsWith("```json")) t = t.slice(7);
@@ -397,7 +408,7 @@ SCORECARD INSTRUCTIONS (for overallScore fields):
           return t.trim();
         };
 
-        let cleanedPlaybookText = cleanJson(playbookResult.content[0].text);
+        let cleanedPlaybookText = cleanJson(call2Raw.content[0].text);
 
         console.log("Cleaned analysis text (first 500 chars):", cleanedPlaybookText.slice(0, 500));
         console.log("Cleaned analysis text (last 200 chars):", cleanedPlaybookText.slice(-200));
@@ -421,7 +432,7 @@ SCORECARD INSTRUCTIONS (for overallScore fields):
           console.log("Retry parse succeeded ✓");
         }
 
-        console.log("Step 9: Clause analysis completed ✓");
+        console.log(`[${elapsed()}] Step 7: Clause analysis completed ✓`);
         console.log("Analysis structure:", {
           hasClauseAnalysis: !!playbookComparison.clauseAnalysis,
           clauseAnalysisIsArray: Array.isArray(playbookComparison.clauseAnalysis),
@@ -542,13 +553,13 @@ SCORECARD INSTRUCTIONS (for overallScore fields):
           deal_score: playbookComparison?.overallScore?.dealScore ?? null,
           verdict: playbookComparison?.overallScore?.verdict ?? null,
         });
-        console.log("Step 10: Contract saved to history ✓");
+        console.log(`[${elapsed()}] Step 10: Contract saved to history ✓`);
       } catch (saveError) {
         console.log("Save to history failed (non-critical):", saveError.message);
       }
     }
 
-    console.log("Step 11: Sending success response to client");
+    console.log(`[${elapsed()}] Step 11: Sending success response to client`);
     console.log("Response includes playbookComparison:", !!playbookComparison);
     if (playbookComparison) {
       console.log("PlaybookComparison totalClauses:", playbookComparison.overallScore?.totalClauses);

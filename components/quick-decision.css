@@ -201,7 +201,7 @@
 .qd-badge.risk-critical { background: rgba(178,58,46,.10);  color: #B23A2E; border-color: rgba(178,58,46,.22); }
 
 .qd-badge.dev-none     { background: rgba(31,74,59,.10);  color: #1F4A3B; border-color: rgba(31,74,59,.20); }
-.qd-badge.dev-minor    { background: rgba(26,22,18,.06);  color: #4A453E; border-color: rgba(26,22,18,.14); }
+.qd-badge.dev-minor    { background: rgba(31,74,59,.06);  color: #2d6b52; border-color: rgba(31,74,59,.14); }
 .qd-badge.dev-moderate { background: rgba(239,178,62,.15); color: #8B6C10; border-color: rgba(239,178,62,.35); }
 .qd-badge.dev-major    { background: rgba(233,167,157,.18); color: #a0443a; border-color: rgba(233,167,157,.40); }
 .qd-badge.dev-critical { background: rgba(178,58,46,.10);  color: #B23A2E; border-color: rgba(178,58,46,.22); }

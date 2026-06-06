@@ -64,11 +64,21 @@ function RiskBadge({ risk }: { risk: string }) {
   );
 }
 
+const DEVIATION_CONFIG: Record<string, { cls: string; label: string }> = {
+  none:        { cls: 'dev-none',     label: 'None'       },
+  minor:       { cls: 'dev-minor',    label: 'Minor'      },
+  moderate:    { cls: 'dev-moderate', label: 'Moderate'   },
+  major:       { cls: 'dev-major',    label: 'Major'      },
+  critical:    { cls: 'dev-critical', label: 'Critical'   },
+  no_match:    { cls: 'dev-no-match', label: 'No Playbook' },
+  no_playbook: { cls: 'dev-no-match', label: 'No Playbook' },
+};
+
 function DeviationBadge({ deviation }: { deviation: string }) {
-  if (deviation === 'no_playbook') return null;
-  const cls = `dev-${deviation.replace('_', '-')}`;
+  const cfg = DEVIATION_CONFIG[deviation];
+  if (!cfg) return null;
   return (
-    <span className={`qd-badge ${cls}`}>{deviation.replace(/_/g, ' ')}</span>
+    <span className={`qd-badge ${cfg.cls}`}>{cfg.label}</span>
   );
 }
 

@@ -297,6 +297,9 @@ export default function AnalyzePage() {
             {userId && (
               <Link href="/history" className="az-pill">History</Link>
             )}
+            {userId && (
+              <Link href="/knowledge" className="az-pill">Knowledge</Link>
+            )}
             {userId ? (
               <>
                 <button
