@@ -1,6 +1,6 @@
 'use client';
 
-import './knowledge.css';
+import '../../knowledge/knowledge.css';
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -144,29 +144,6 @@ export default function KnowledgePage() {
 
   return (
     <div className="kb-root">
-      {/* Nav */}
-      <nav className="kb-nav">
-        <div className="kb-nav-inner">
-          <Link href="/" className="kb-brand">
-            <div className="kb-badge">§</div>
-            <div className="kb-brand-name">ClausePal</div>
-          </Link>
-          <div className="kb-nav-right">
-            <Link href="/analyze" className="kb-pill">Analyze</Link>
-            <Link href="/history" className="kb-pill">History</Link>
-            <Link href="/knowledge" className="kb-pill active">Knowledge</Link>
-            <button
-              type="button"
-              className="kb-pill"
-              onClick={() => supabase.auth.signOut().then(() => router.push('/auth'))}
-            >
-              Sign out
-            </button>
-            {userEmail && <div className="kb-avatar">{userEmail[0].toUpperCase()}</div>}
-          </div>
-        </div>
-      </nav>
-
       <div className="kb-page">
         {/* Header */}
         <div className="kb-eyebrow">Knowledge Base · {documents.length} {documents.length === 1 ? 'document' : 'documents'}</div>

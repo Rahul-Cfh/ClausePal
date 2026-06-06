@@ -1,5 +1,9 @@
+'use client';
+
 import './landing.css';
 import Link from 'next/link';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
 const TICKER_ITEMS: { text: string; dot?: true }[] = [
   { text: 'Read every contract like you wrote it yourself' },
@@ -11,6 +15,14 @@ const TICKER_ITEMS: { text: string; dot?: true }[] = [
 ];
 
 export default function Home() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsLoggedIn(!!session);
+    });
+  }, []);
+
   return (
     <div className="lp">
 
@@ -28,8 +40,14 @@ export default function Home() {
             <a className="pill" href="#">Docs</a>
           </div>
           <div className="nav-actions">
-            <Link href="/auth" className="btn">Sign in</Link>
-            <Link href="/analyze" className="btn solid">Analyze a contract →</Link>
+            {isLoggedIn ? (
+              <Link href="/portal" className="btn solid">My Portal</Link>
+            ) : (
+              <>
+                <Link href="/auth" className="btn">Sign in</Link>
+                <Link href="/analyze" className="btn solid">Analyze a contract →</Link>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -57,7 +75,7 @@ export default function Home() {
             <h1>Catch the clause<br />before it <em>catches</em><br />you.</h1>
             <p className="hero-sub">ClausePal reads a contract in seconds, scores its risk, flags the clauses that matter, and answers your questions in plain English — so you sign with your eyes open.</p>
             <div className="hero-cta">
-              <Link href="/analyze" className="btn solid">Analyze a contract →</Link>
+              <Link href={isLoggedIn ? '/portal' : '/analyze'} className="btn solid">{isLoggedIn ? 'Go to Dashboard →' : 'Analyze a contract →'}</Link>
               <Link href="/analyze" className="btn">See a sample report</Link>
               <span className="cta-note">Free for your first 3 documents</span>
             </div>

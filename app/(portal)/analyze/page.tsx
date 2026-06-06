@@ -1,6 +1,6 @@
 "use client";
 
-import "./analyze.css";
+import "../../analyze/analyze.css";
 import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Download, Upload, Send } from "lucide-react";
@@ -281,50 +281,6 @@ export default function AnalyzePage() {
 
   return (
     <>
-      {/* ── Nav ── */}
-      <nav className="az-nav">
-        <div className="az-nav-inner">
-          <Link href="/" className="az-brand">
-            <div className="az-badge">§</div>
-            <div className="az-brand-name">ClausePal</div>
-          </Link>
-          <div className="az-nav-right">
-            {result && (
-              <span className="az-step" style={{ padding: '9px 16px' }}>
-                {contractType} · {country}
-              </span>
-            )}
-            {userId && (
-              <Link href="/history" className="az-pill">History</Link>
-            )}
-            {userId && (
-              <Link href="/knowledge" className="az-pill">Knowledge</Link>
-            )}
-            {userId ? (
-              <>
-                <button
-                  type="button"
-                  title={userEmail ?? undefined}
-                  onClick={() => supabase.auth.signOut()}
-                  className="az-pill"
-                >
-                  Sign out
-                </button>
-                {userEmail && (
-                  <div className="az-avatar">
-                    {userEmail[0].toUpperCase()}
-                  </div>
-                )}
-              </>
-            ) : (
-              <Link href="/auth" className="az-pill" style={{ color: 'var(--forest)', fontWeight: 600 }}>
-                Sign In
-              </Link>
-            )}
-          </div>
-        </div>
-      </nav>
-
       {/* ── Main ── */}
       {!result ? (
         /* ── Pre-analysis: editorial upload form ── */
@@ -430,7 +386,7 @@ export default function AnalyzePage() {
         </main>
       ) : (
         /* ── Post-analysis: two-panel layout ── */
-        <div className="flex" style={{ height: 'calc(100vh - 74px)', background: '#F2EFEB' }}>
+        <div className="flex" style={{ height: '100vh', background: '#F2EFEB' }}>
 
           {/* ── Left panel — tabbed results (60%) ── */}
           <div className="flex flex-col" style={{ width: '60%', borderRight: '1px solid rgba(26,22,18,.13)' }}>

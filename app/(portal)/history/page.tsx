@@ -1,6 +1,6 @@
 "use client";
 
-import "./history.css";
+import "../../history/history.css";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -120,29 +120,6 @@ export default function HistoryPage() {
 
   return (
     <div className="hs-root">
-      {/* ── Nav ── */}
-      <nav className="hs-nav">
-        <div className="hs-nav-inner">
-          <Link href="/" className="hs-brand">
-            <div className="hs-badge">§</div>
-            <div className="hs-brand-name">ClausePal</div>
-          </Link>
-          <div className="hs-nav-right">
-            <Link href="/history" className="hs-pill active">History</Link>
-            <button
-              type="button"
-              className="hs-pill"
-              onClick={() => supabase.auth.signOut().then(() => router.push("/auth"))}
-            >
-              Sign out
-            </button>
-            {userEmail && (
-              <div className="hs-avatar">{userEmail[0].toUpperCase()}</div>
-            )}
-          </div>
-        </div>
-      </nav>
-
       {/* ── Page ── */}
       <div className="hs-page">
 
